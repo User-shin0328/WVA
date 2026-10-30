@@ -1,0 +1,24 @@
+# Virtual Environment & Python Caches
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# External reference archives & folders
+ARTEX-main/
+ARTEX-main.zip
+
+# Temporary & Local logs
+*.log
+*.tmp
+*.bak
+README_안내.txt
+
+# Test files & test runners (as requested)
+tests/
+3_WVA_단위테스트_검증.bat
+RUN_WVA_PYTEST_VERIFICATION.bat
