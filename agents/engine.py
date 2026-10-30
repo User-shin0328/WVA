@@ -1,5 +1,5 @@
 import httpx
-from typing import Optional
+from typing import Optional, Callable, Any
 from core.graph.blackboard import SecurityBlackboard
 from core.safety.governance import SafetyGovernance
 from surface.recon import SurfaceReconEngine
@@ -12,10 +12,10 @@ class VulnerabilityAnalysisEngine:
     Main Orchestrator for the Web Vulnerability & Attack Path Chaining Agent.
     Drives the pipeline: Surface Recon -> Specialized Auditors -> Chaining Planner -> Threat Graph.
     """
-    def __init__(self, target_url: str):
+    def __init__(self, target_url: str, event_callback: Optional[Callable[[str, Any], None]] = None):
         self.target_url = target_url.rstrip("/")
         self.governance = SafetyGovernance(self.target_url)
-        self.blackboard = SecurityBlackboard(self.target_url)
+        self.blackboard = SecurityBlackboard(self.target_url, event_callback=event_callback)
 
     async def execute_audit(self) -> SecurityBlackboard:
         self.blackboard.log(f"=== Starting Security Assessment against: {self.target_url} ===")

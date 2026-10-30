@@ -134,3 +134,54 @@ class AttackGraphEngine:
                 continue
 
         return chains
+
+    def to_cytoscape_elements(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Convert the attack graph to Cytoscape.js nodes and edges JSON format."""
+        self.build_graph()
+        nodes = []
+        edges = []
+
+        chain_vuln_ids = set()
+        for c in self.blackboard.chains:
+            for s in c.steps:
+                chain_vuln_ids.add(s.finding_id)
+
+        for node_id, attrs in self.graph.nodes(data=True):
+            ntype = attrs.get("node_type", "state")
+            label = node_id
+            severity = attrs.get("severity", "INFO")
+            is_in_chain = False
+
+            if ntype == "vulnerability":
+                fid = attrs.get("finding_id", "")
+                label = attrs.get("title", fid)
+                is_in_chain = fid in chain_vuln_ids
+            elif ntype == "state":
+                priv = attrs.get("privilege", "")
+                label = f"Privilege: {priv.upper()}"
+            elif "ARTIFACT:" in node_id:
+                label = f"Artifact: {node_id.replace('ARTIFACT:', '')}"
+
+            nodes.append({
+                "data": {
+                    "id": node_id,
+                    "label": label,
+                    "type": ntype,
+                    "severity": severity,
+                    "is_in_chain": is_in_chain,
+                    "endpoint": attrs.get("endpoint", ""),
+                    "remediation": attrs.get("remediation", "")
+                }
+            })
+
+        for u, v, attrs in self.graph.edges(data=True):
+            edges.append({
+                "data": {
+                    "id": f"{u}->{v}",
+                    "source": u,
+                    "target": v,
+                    "label": attrs.get("relation", "")
+                }
+            })
+
+        return {"nodes": nodes, "edges": edges}

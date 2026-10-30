@@ -4,6 +4,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Architecture](https://img.shields.io/badge/architecture-Multi--Agent%20Graph-orange.svg)](#시스템-아키텍처)
+[![Dashboard](https://img.shields.io/badge/dashboard-Live%20Cyber--Dark%20UI-cyan.svg)](#-대시보드-화면-실행)
 
 ---
 
@@ -14,6 +15,17 @@
 **WVA (Web Vulnerability Auditor)**는 이러한 공격 기법을 역으로 추적·시뮬레이션하여:
 1. **복합 공격 경로(Exploit Chain)**를 정형 상태 전이 그래프(DAG) 기반으로 사전 탐지하고,
 2. 방어자가 최소 비용으로 전체 공격을 원천 차단할 수 있는 **최적 차단 거점(Choke Point)**을 도출하는 지능형 보안 감사 에이전트 시스템입니다.
+
+---
+
+## 🖥️ 실행 대시보드 화면 (Live Dashboard)
+
+WVA는 분석 상황을 실시간으로 관제할 수 있는 **사이버 다크모드 대시보드(FastAPI + Cytoscape.js)**를 제공합니다:
+
+* **인터랙티브 공격 경로 그래프 (Cytoscape.js)**: 다단계 권한 상승 인과관계를 시각화하고, 노드 클릭 시 세부 패킷/증적 표출.
+* **최우선 방어 거점 (Choke Point Strategy)**: 공격 체인을 끊어내기 위한 최소 비용 차단점 및 언어별 패치 코드 제공.
+* **실시간 SSE 이벤트 스트림**: 에이전트의 정찰, 탐색, 카나리 분석 과정 실시간 터미널 출력.
+* **식별된 공격 표면 (Endpoints Table)**: 수집된 모든 URL 경로, HTTP 메소드, 인증 요구사항 목록화.
 
 ---
 
@@ -46,6 +58,7 @@ flowchart TB
 
     subgraph L6["Layer 6: Reporting & Remediation Engine"]
         REP["SecurityReportGenerator<br/>(Markdown, Mermaid 다이어그램, SARIF/JSON)"]
+        DASH["FastAPI Live Dashboard<br/>(Cytoscape.js 인터랙티브 UI, SSE 스트림)"]
     end
 
     L1 --> L2
@@ -55,32 +68,21 @@ flowchart TB
     L5 --> L6
 ```
 
-### 핵심 차별화 요소
-- **State-based Attack Path Graph**: 단순 텍스트 추론 대신 NetworkX 유향 그래프(DAG) 기반으로 전제조건(Preconditions)과 후조건(Postconditions)의 상태 변화를 정형화.
-- **Typed Security Blackboard**: Pydantic 기반의 강타입 데이터 모델을 통해 에이전트 간 정보 전달 시 토큰 낭비 및 환각(Hallucination) 방지.
-- **Choke Point Defense**: 공격 체인을 끊어내기 위한 최소 비용 최우선 패치 거점 자동 산출.
-
 ---
 
 ## 🚀 빠른 시작 (Quick Start)
 
-### 1. 환경 설정 및 의존성 설치
+### 1. Windows 원클릭 실행 (배치 파일)
+* `4_WVA_대시보드_실행.bat` (영문: `START_WVA_DASHBOARD.bat`): **[강력 추천] 대시보드 서버 기동 및 웹 브라우저 자동 오픈 (`http://127.0.0.1:8787`)**
+* `1_WVA_웹취약점_연계분석_데모실행.bat` (영문: `START_WVA_CHAIN_AUDITOR_DEMO.bat`): 모의 서버 구동 및 CLI 데모 분석
+* `2_WVA_취약점분석_CLI_직접실행.bat` (영문: `RUN_WVA_SCANNER_CLI.bat`): 대화형 CLI 메뉴
+
+### 2. CLI 명령어 실행
 ```bash
-# 가상환경 생성 및 활성화
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# 대시보드 웹 서버 실행 (포트 8787)
+python -m dashboard.server
 
-# 의존성 패키지 설치
-pip install -r requirements.txt
-```
-
-### 2. Windows 원클릭 실행 (배치 파일)
-* `1_WVA_웹취약점_연계분석_데모실행.bat` (영문: `START_WVA_CHAIN_AUDITOR_DEMO.bat`): 자체 모의 서버 구동 및 3단계 연계 취약점 데모 분석 실행
-* `2_WVA_취약점분석_CLI_직접실행.bat` (영문: `RUN_WVA_SCANNER_CLI.bat`): 대화형 CLI 메뉴를 통한 타깃 URL 직접 분석
-
-### 3. CLI 명령어 실행
-```bash
-# 모의 타깃 자동 연계 데모 실행
+# 모의 타깃 자동 연계 데모 실행 (CLI)
 python cli.py --demo
 
 # 사용자 지정 웹 애플리케이션 진단
@@ -93,10 +95,17 @@ python cli.py --target http://localhost:8080
 
 ```text
 WVA/
+├── 4_WVA_대시보드_실행.bat             # [추천] 대시보드 웹 서버 실행 및 브라우저 오픈
+├── START_WVA_DASHBOARD.bat              # 영문 동등 실행 파일
 ├── 1_WVA_웹취약점_연계분석_데모실행.bat     # 모의 취약점 타깃 자동 구동 및 연계 분석 데모
 ├── START_WVA_CHAIN_AUDITOR_DEMO.bat     # 영문 동등 실행 파일
 ├── 2_WVA_취약점분석_CLI_직접실행.bat       # 대화형 CLI 메뉴
 ├── RUN_WVA_SCANNER_CLI.bat              # 영문 동등 실행 파일
+│
+├── dashboard/                           # WVA 실행 대시보드 패키지
+│   ├── server.py                        # FastAPI 대시보드 백엔드 (SSE 스트림 & REST API)
+│   └── static/
+│       └── index.html                   # 사이버 다크모드 웹 UI (Cytoscape.js 인터랙티브 그래프)
 │
 ├── WVA_설계계획서_최종본.md               # 시스템 최종 설계 계획서
 ├── WVA_취약점분석_결과보고서_초안.md      # 취약점 연계 분석 결과보고서 초안
