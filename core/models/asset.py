@@ -10,6 +10,12 @@ class HttpEndpoint(BaseModel):
     headers: Dict[str, str] = Field(default_factory=dict)
     auth_required: bool = False
     source: str = "crawler"  # crawler, static_js, sitemap, openapi
+    sources: List[str] = Field(default_factory=list)
+    status_code: Optional[int] = None
+    content_type: Optional[str] = None
+    response_time_ms: Optional[float] = None
+    response_bytes: Optional[int] = None
+    checked_at: Optional[str] = None
 
 class WebAsset(BaseModel):
     root_domain: str

@@ -1,134 +1,93 @@
-# WVA (Web Vulnerability Auditor)
-> **차세대 지능형 웹 취약점 연계 분석 및 공격 경로 시뮬레이션 Agent**
+# WVA · 웹 취약점 진단
 
-[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Architecture](https://img.shields.io/badge/architecture-Multi--Agent%20Graph-orange.svg)](#시스템-아키텍처)
-[![Dashboard](https://img.shields.io/badge/dashboard-Live%20Cyber--Dark%20UI-cyan.svg)](#-대시보드-화면-실행)
+Windows 실행파일과 로컬 브라우저로 사용하는 웹 진단 도구입니다. **직접 입력한 대상 진단 → 증거 확인 → 연계 경로 검토 → 보고서 저장**을 기본 흐름으로 제공합니다.
 
----
+![WVA 진단 화면](docs/images/dashboard.png)
 
-## 📌 프로젝트 개요 (Overview)
+화면은 제공된 로컬 실습 대상을 진단한 결과입니다. 현재 검증된 Windows 실행파일 `WVA.exe`를 저장소에 포함하며, 빌드 해시와 테스트 기록은 `docs/BUILD_INFO.json` 및 `tests/TEST_GUIDE.md`에서 확인할 수 있습니다.
 
-현대의 공격 에이전트 및 고도화된 침투 공격은 단일한 고위험 취약점을 직접 공략하기보다, **사소해 보이는 여러 개의 저·중위험(Low/Medium) 취약점을 수집·결합(Chaining)하여 최고 권한(Admin/System)을 장악하는 다단계 공격 경로(Attack Path)**를 활용합니다.
+## 바로 실행
 
-**WVA (Web Vulnerability Auditor)**는 이러한 공격 기법을 역으로 추적·시뮬레이션하여:
-1. **복합 공격 경로(Exploit Chain)**를 정형 상태 전이 그래프(DAG) 기반으로 사전 탐지하고,
-2. 방어자가 최소 비용으로 전체 공격을 원천 차단할 수 있는 **최적 차단 거점(Choke Point)**을 도출하는 지능형 보안 감사 에이전트 시스템입니다.
+1. 이 폴더의 **`WVA.exe`**를 더블클릭합니다. Python을 따로 설치할 필요가 없습니다.
+2. 브라우저에서 진단할 서버 주소를 입력합니다. 예: 로컬 실습 대상 `http://127.0.0.1:8990`.
+3. **진단 시작**을 누릅니다. 진행 모션 후 완료되면 위험도·CVSS 차트와 상세 표가 표시됩니다. 발견 항목을 누르면 큰 상세 창에서 증거와 조치 절차를 확인합니다.
+4. **경로 / 표면 / 로그** 메뉴에서 관련 정보를 확인합니다.
+5. **저장** 화면에서 원하는 정보와 **JSON / Markdown / CSV** 형식을 선택해 내려받습니다.
+6. **앱 종료**로 서비스를 종료합니다. 브라우저 탭만 닫으면 서버는 계속 실행됩니다.
 
----
+기본 주소는 `http://127.0.0.1:9030`입니다. 포트가 사용 중이면 9031~9039 중 가능한 포트로 열립니다. 이미 실행 중인 WVA가 있으면 해당 화면을 재사용합니다. 포트를 지정할 수도 있습니다.
 
-## 🖥️ 실행 대시보드 화면 (Live Dashboard)
-
-WVA는 분석 상황을 실시간으로 관제할 수 있는 **사이버 다크모드 대시보드(FastAPI + Cytoscape.js)**를 제공합니다:
-
-* **인터랙티브 공격 경로 그래프 (Cytoscape.js)**: 다단계 권한 상승 인과관계를 시각화하고, 노드 클릭 시 세부 패킷/증적 표출.
-* **최우선 방어 거점 (Choke Point Strategy)**: 공격 체인을 끊어내기 위한 최소 비용 차단점 및 언어별 패치 코드 제공.
-* **실시간 SSE 이벤트 스트림**: 에이전트의 정찰, 탐색, 카나리 분석 과정 실시간 터미널 출력.
-* **식별된 공격 표면 (Endpoints Table)**: 수집된 모든 URL 경로, HTTP 메소드, 인증 요구사항 목록화.
-
----
-
-## 🏛️ 시스템 아키텍처 (Architecture)
-
-```mermaid
-flowchart TB
-    subgraph L1["Layer 1: Scope & Safety Governance"]
-        GOV["SafetyGovernance<br/>(화이트리스트 스코프, 비파괴 카나리 프로브)"]
-    end
-
-    subgraph L2["Layer 2: Surface Discovery Engine"]
-        RECON["SurfaceReconEngine<br/>(동적 엔드포인트/폼 파싱, 기술 스택)"]
-        CANARY["ReflectionCanaryAuditor<br/>(안전한 카나리 반사 분석)"]
-    end
-
-    subgraph L3["Layer 3: Typed Security Blackboard"]
-        BB[("SecurityBlackboard<br/>- WebAsset (엔드포인트)<br/>- SecurityState (권한/유출 아티팩트)<br/>- Findings & Chains")]
-    end
-
-    subgraph L4["Layer 4: Specialized Audit Swarm"]
-        AUD_CONF["ConfigAndHeaderAuditor<br/>(CSP, HSTS, Cookie, 디버그 엔드포인트)"]
-        AUD_IDOR["IdorAndBolaAuditor<br/>(BOLA / IDOR 권한 격리 검증)"]
-    end
-
-    subgraph L5["Layer 5: Chain Planner & Graph Engine"]
-        APG["AttackGraphEngine (NetworkX DAG)<br/>(Pre/Post-condition 상태 전이 매핑)"]
-        PLANNER["ChainPlannerAgent<br/>(권한 상승 경로 탐색 & 초크 포인트 도출)"]
-    end
-
-    subgraph L6["Layer 6: Reporting & Remediation Engine"]
-        REP["SecurityReportGenerator<br/>(Markdown, Mermaid 다이어그램, SARIF/JSON)"]
-        DASH["FastAPI Live Dashboard<br/>(Cytoscape.js 인터랙티브 UI, SSE 스트림)"]
-    end
-
-    L1 --> L2
-    L2 --> L3
-    L3 <--> L4
-    L3 <--> L5
-    L5 --> L6
+```powershell
+.\WVA.exe --port 9040
 ```
 
----
+새 실행파일은 대시보드, 한글/숫자 폰트, 로컬 데모를 포함합니다. 외부 CDN 없이 동작합니다. 어두운 배경·흰 글씨·청록색 선을 사용하고 직접 진단을 기본 작업으로 구성했습니다. 이전 배치 실행기 6개는 삭제했습니다.
 
-## 🚀 빠른 시작 (Quick Start)
+## 테스트
 
-### 1. Windows 원클릭 실행 (배치 파일)
-* `4_WVA_대시보드_실행.bat` (영문: `START_WVA_DASHBOARD.bat`): **[강력 추천] 대시보드 서버 기동 및 웹 브라우저 자동 오픈 (`http://127.0.0.1:8787`)**
-* `1_WVA_웹취약점_연계분석_데모실행.bat` (영문: `START_WVA_CHAIN_AUDITOR_DEMO.bat`): 모의 서버 구동 및 CLI 데모 분석
-* `2_WVA_취약점분석_CLI_직접실행.bat` (영문: `RUN_WVA_SCANNER_CLI.bat`): 대화형 CLI 메뉴
+테스트 환경 `.venv/`와 `tests/`가 구성되어 있습니다. 상세한 실행 순서, 기대 수치, 판정 기준, 실제 결과보고서는 **[테스트 상세 설명](tests/TEST_GUIDE.md)** 한 파일에서 볼 수 있습니다.
 
-### 2. CLI 명령어 실행
-```bash
-# 대시보드 웹 서버 실행 (포트 8787)
-python -m dashboard.server
+```powershell
+# 다른 PC에서 환경을 구축할 때
+powershell -ExecutionPolicy Bypass -File .\tests\Setup-TestEnvironment.ps1
 
-# 모의 타깃 자동 연계 데모 실행 (CLI)
-python cli.py --demo
+# 자동 기능 테스트 및 결과보고서 갱신
+.\.venv\Scripts\python.exe -m tests.run_tests
 
-# 사용자 지정 웹 애플리케이션 진단
-python cli.py --target http://localhost:8080
+# 직접 입력할 로컬 취약 대상: 별도 창에서 실행
+.\.venv\Scripts\python.exe -m tests.lab.target --mode vulnerable --port 8990
+
+# 방어 설정을 적용한 비교 대상: 다른 창에서 실행
+.\.venv\Scripts\python.exe -m tests.lab.target --mode hardened --port 8991
 ```
 
----
+제공된 취약 대상의 예상 결과는 엔드포인트 8개, 발견 항목 5개, 3단계 연계 경로 1개입니다. 방어 프로필은 엔드포인트 4개, 발견 항목과 연계 경로 0개입니다. 수동 대상은 테스트 후 `Ctrl+C`로 종료합니다. 화면의 **로컬 데모 실행**은 임시 포트의 실습 대상을 자동으로 시작하고 정리합니다.
 
-## 📂 프로젝트 구조 (Directory Structure)
+## 저장 위치와 오류 확인
 
-```text
-WVA/
-├── 4_WVA_대시보드_실행.bat             # [추천] 대시보드 웹 서버 실행 및 브라우저 오픈
-├── START_WVA_DASHBOARD.bat              # 영문 동등 실행 파일
-├── 1_WVA_웹취약점_연계분석_데모실행.bat     # 모의 취약점 타깃 자동 구동 및 연계 분석 데모
-├── START_WVA_CHAIN_AUDITOR_DEMO.bat     # 영문 동등 실행 파일
-├── 2_WVA_취약점분석_CLI_직접실행.bat       # 대화형 CLI 메뉴
-├── RUN_WVA_SCANNER_CLI.bat              # 영문 동등 실행 파일
-│
-├── dashboard/                           # WVA 실행 대시보드 패키지
-│   ├── server.py                        # FastAPI 대시보드 백엔드 (SSE 스트림 & REST API)
-│   └── static/
-│       └── index.html                   # 사이버 다크모드 웹 UI (Cytoscape.js 인터랙티브 그래프)
-│
-├── WVA_설계계획서_최종본.md               # 시스템 최종 설계 계획서
-├── WVA_취약점분석_결과보고서_초안.md      # 취약점 연계 분석 결과보고서 초안
-├── WVA_사용설명서.txt                     # 사용자 매뉴얼
-│
-├── cli.py                               # CLI 진입점 및 데모 오케스트레이터
-├── mock_target.py                       # 연계 취약점 검증용 모의 테스트베드 앱 (FastAPI)
-├── requirements.txt                     # 의존성 패키지 목록
-│
-├── core/
-│   ├── models/                          # Asset, SecurityState, Vulnerability, ExploitChain 모델
-│   ├── graph/                           # AttackGraphEngine (NetworkX DAG), SecurityBlackboard
-│   └── safety/                          # SafetyGovernance (화이트리스트 스코프, 비파괴 정책)
-│
-├── surface/                             # SurfaceReconEngine (자산/엔드포인트), ReflectionCanaryAuditor
-├── agents/                              # ConfigAuditor, IdorAuditor, ChainPlanner, AnalysisEngine
-└── reporting/                           # Markdown (Mermaid 포함) 및 JSON 리포트 생성기
+- 완료 보고서: exe 옆 `reports/날짜_시간_진단ID.md` 및 `.json`.
+- 진단별 활동 로그: exe 옆 `logs/scans/날짜_시간_진단ID.jsonl` (실시간 추가 기록).
+- 실행 오류 로그: exe 옆 `logs/WVA.log`. 두 위치는 **로그** 화면에서 확인합니다.
+- 해당 위치에 쓰기 권한이 없으면 `%LOCALAPPDATA%/WVA/` 아래를 사용합니다.
+- 진단 실패·중단은 완료와 구분하고 완료 보고서 다운로드를 막습니다.
+- 앱 재실행 시 화면 데이터는 초기화되며, 저장된 파일은 남습니다.
+
+2.1 화면 구성: 진단 화면의 공통 설명 멘트·우선 조치 패널을 없앴습니다. 차트 아래 표에는 위험도·CWE·메서드·CVSS·증거·조치 요약이 표시됩니다. 경로 단계와 발견 항목은 같은 상세 창을 사용하며 현재 화면을 유지합니다. 표면 화면은 실제 응답 코드·시간·크기·헤더와 문서의 매개변수 정보를 구분해 표시합니다. 저장 화면은 요약·발견 항목·경로·표면·로그를 독립적으로 선택할 수 있습니다.
+
+권고사항은 항목별 **조치 순서**로 정리합니다. 각 단계에 제목·실행할 조치·완료 기준이 있으며, 실제 순서는 문제 유형에 따라 다릅니다. 예를 들어 유출 키로 관리자 응답에 접근한 항목은 현황 확인 → 유출 키·접근 차단 → 관리자 권한 검사 → 새 인증 정보 발급 → 상위 노출 경로 정리 → 재검증 순서입니다. 상세 창, 선택 저장(JSON·Markdown·CSV), 자동 보고서에 같은 순서를 제공합니다.
+
+`[Errno 42] Illegal byte sequence`가 발생한 초기 빌드는 교체했습니다. Python 런타임이 요구하는 TLS 인증서 정책 파일을 포함하고, 한글 경로에서 exe만 복사한 독립 실행을 검증합니다. 자세한 실제 결과는 테스트 문서에 기록됩니다.
+
+## 소스 실행과 재빌드
+
+```powershell
+.\.venv\Scripts\python.exe launcher.py
+powershell -ExecutionPolicy Bypass -File .\packaging\build.ps1
+.\.venv\Scripts\python.exe -m tests.smoke_executable
 ```
 
----
+테스트용 고정 버전은 `requirements-lock.txt`, 런타임 의존성 목록은 `requirements.txt`에 있습니다. 빌드 스크립트가 루트의 exe를 재생성하므로 빌드 전 실행 중인 앱을 종료하세요.
 
-## 🛡️ 안전성 및 보안 윤리 (Safety & Disclaimer)
+## 분석 범위
 
-* 본 도구는 **사전 인가된 환경에서의 정당한 보안 감사 및 방어 목적**으로 설계되었습니다.
-* `SafetyGovernance` 모듈을 통해 파괴적 행위(`DROP`, `DELETE` 등) 및 스코프 외부 도메인에 대한 접근을 원천 차단합니다.
-* 승인되지 않은 외부 시스템에 대한 무단 진단 및 악의적 사용은 법률에 의해 엄격히 금지됩니다.
+헤더·디버그 정보·제한된 객체 접근·CORS·수집 키의 관리자 응답을 정해진 경로와 휴리스틱으로 검사합니다. 연계 경로는 관찰된 응답과 아티팩트 유형을 연결한 추론입니다. 제공되는 차단점은 각 단계의 수정 후보입니다.
+
+이 도구는 전체 URL 크롤러, 모든 OWASP 항목 검사기, 로그인 세션 간 권한 대조 도구, 최소 비용 방어 최적화 엔진이 아닙니다. JSON은 자체 WVA 스키마이며 SARIF 형식이 아닙니다. 결과 0건이 전체 웹 보안의 안전을 의미하지 않습니다. 접근 권한이 있는 대상에서 사용하세요.
+
+## 주요 파일
+
+| 위치 | 내용 |
+| --- | --- |
+| `WVA.exe` | Windows x64 단독 실행파일 |
+| `launcher.py` | 브라우저 열기·서버 재사용·포트 선택·쓰기 위치 |
+| `dashboard/` | API·스캔 상태·로컬 UI·내장 데모 수명 관리 |
+| `agents/`, `core/`, `surface/`, `reporting/` | 기존 분석 엔진과 보완된 진단 규칙 |
+| `tests/TEST_GUIDE.md` | 테스트 순서·예상 결과·실제 결과 통합 문서 |
+| `tests/TEST_RESULTS.md` | 별도 결과보고서 |
+| `tests/lab/` | 취약/방어 비교 환경 |
+| `packaging/` | exe 빌드 스크립트와 아이콘 |
+| `docs/PROJECT_ANALYSIS.md` | 폴더 분석·변경 내역·구현 범위 |
+| `docs/REMOVED_LAUNCHERS.md` | 삭제한 이전 실행기와 해시 |
+| `PRODUCT.md`, `DESIGN.md` | 사용자 요구와 디자인 결정 |
+
+기존 `WVA_설계계획서_최종본.md`, `WVA_SYSTEM_DESIGN_SPECIFICATION.md`는 초기 설계 참고 자료입니다. 현재 구현과 검증 상태는 이 README 및 테스트 결과를 기준으로 확인하세요.

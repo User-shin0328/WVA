@@ -1,512 +1,74 @@
-<!DOCTYPE html>
-<html lang="ko" class="dark">
+<!doctype html>
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WVA - Web Vulnerability Auditor & Attack Path Dashboard</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        darkbg: '#0A0E17',
-                        cardbg: '#111827',
-                        bordercolor: '#1F293D',
-                        cybercyan: '#06B6D4',
-                        cyberred: '#EF4444',
-                        cybergreen: '#10B981',
-                        cyberamber: '#F59E0B'
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- Cytoscape.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        #cy {
-            width: 100%;
-            height: 480px;
-            background-color: #0b1120;
-            border-radius: 0.5rem;
-        }
-        .terminal-scroll::-webkit-scrollbar {
-            width: 6px;
-        }
-        .terminal-scroll::-webkit-scrollbar-thumb {
-            background-color: #374151;
-            border-radius: 3px;
-        }
-    </style>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+  <title>WVA · 웹 취약점 진단</title>
+  <link rel="icon" href="/static/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/app.css"><script src="/static/app.js" defer></script>
 </head>
-<body class="bg-darkbg text-gray-200 min-h-screen font-sans flex flex-col">
-
-    <!-- Top Navigation Bar -->
-    <header class="border-b border-bordercolor bg-cardbg/80 backdrop-blur sticky top-0 z-50 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-center space-x-3">
-            <div class="w-9 h-9 rounded-lg bg-cybercyan/20 border border-cybercyan/50 flex items-center justify-center text-cybercyan">
-                <i data-lucide="shield-alert" class="w-5 h-5"></i>
-            </div>
-            <div>
-                <div class="flex items-center space-x-2">
-                    <h1 class="text-lg font-bold tracking-wider text-white">WVA <span class="text-xs px-2 py-0.5 rounded bg-cybercyan/20 text-cybercyan border border-cybercyan/30">AUDITOR</span></h1>
-                    <span id="status-badge" class="text-xs px-2.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700 font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-gray-500"></span> IDLE
-                    </span>
-                </div>
-                <p class="text-xs text-gray-400">Web Vulnerability & Attack Path Chaining Dashboard</p>
-            </div>
-        </div>
-
-        <!-- Target & Action Controls -->
-        <div class="flex items-center gap-2.5 flex-1 max-w-2xl justify-end">
-            <div class="relative flex-1 max-w-md">
-                <i data-lucide="globe" class="w-4 h-4 text-gray-400 absolute left-3 top-3"></i>
-                <input id="target-input" type="text" value="http://127.0.0.1:8989" 
-                       class="w-full bg-gray-900 border border-bordercolor text-sm rounded-lg pl-9 pr-3 py-2 text-gray-200 focus:outline-none focus:border-cybercyan transition">
-            </div>
-            <button id="btn-demo" onclick="startScan(true)" class="px-3.5 py-2 rounded-lg bg-cybercyan hover:bg-cyan-500 text-black text-sm font-semibold flex items-center gap-1.5 transition shadow-lg shadow-cybercyan/20">
-                <i data-lucide="play" class="w-4 h-4"></i> 데모 스캔
-            </button>
-            <button id="btn-custom" onclick="startScan(false)" class="px-3.5 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-bordercolor text-sm font-medium flex items-center gap-1.5 transition">
-                <i data-lucide="search" class="w-4 h-4"></i> 타깃 진단
-            </button>
-            <button id="btn-stop" onclick="stopScan()" class="px-3 py-2 rounded-lg bg-red-950 hover:bg-red-900 border border-red-800/60 text-red-400 text-sm font-medium hidden flex items-center gap-1.5 transition">
-                <i data-lucide="square" class="w-4 h-4"></i> 중지
-            </button>
-            <div class="border-l border-bordercolor h-7 mx-1"></div>
-            <a href="/api/scan/report/md" download class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-bordercolor text-gray-300 transition" title="보고서 다운로드 (Markdown)">
-                <i data-lucide="file-down" class="w-4 h-4"></i>
-            </a>
-        </div>
-    </header>
-
-    <!-- Main Container -->
-    <main class="flex-1 p-6 space-y-6 max-w-7xl mx-auto w-full">
-
-        <!-- Stat Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="bg-cardbg border border-bordercolor rounded-xl p-4 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-400 font-medium">탐색된 엔드포인트</p>
-                    <h3 id="stat-endpoints" class="text-2xl font-bold text-white mt-1">0</h3>
-                </div>
-                <div class="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
-                    <i data-lucide="network" class="w-5 h-5"></i>
-                </div>
-            </div>
-            <div class="bg-cardbg border border-bordercolor rounded-xl p-4 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-400 font-medium">발견된 취약점</p>
-                    <h3 id="stat-findings" class="text-2xl font-bold text-white mt-1">0</h3>
-                </div>
-                <div class="w-10 h-10 rounded-lg bg-cyberamber/10 text-cyberamber flex items-center justify-center">
-                    <i data-lucide="bug" class="w-5 h-5"></i>
-                </div>
-            </div>
-            <div class="bg-cardbg border border-bordercolor rounded-xl p-4 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-400 font-medium">다단계 공격 체인</p>
-                    <h3 id="stat-chains" class="text-2xl font-bold text-cyberred mt-1">0</h3>
-                </div>
-                <div class="w-10 h-10 rounded-lg bg-cyberred/10 text-cyberred flex items-center justify-center">
-                    <i data-lucide="git-merge" class="w-5 h-5"></i>
-                </div>
-            </div>
-            <div class="bg-cardbg border border-bordercolor rounded-xl p-4 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-400 font-medium">위험도 (Crit / High)</p>
-                    <h3 id="stat-severity" class="text-2xl font-bold text-white mt-1">0 / 0</h3>
-                </div>
-                <div class="w-10 h-10 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
-                    <i data-lucide="flame" class="w-5 h-5"></i>
-                </div>
-            </div>
-        </div>
-
-        <!-- 2 Column Grid: Graph & Choke Point -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-            <!-- Left: Interactive Attack Graph (7 Cols) -->
-            <div class="lg:col-span-7 space-y-4">
-                <div class="bg-cardbg border border-bordercolor rounded-xl p-4 flex flex-col h-[560px]">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-center space-x-2">
-                            <i data-lucide="git-pull-request" class="w-4 h-4 text-cybercyan"></i>
-                            <h2 class="font-bold text-white text-sm">인터랙티브 공격 경로 그래프 (Attack Path Graph)</h2>
-                        </div>
-                        <div class="flex items-center space-x-2 text-xs">
-                            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> 체인 포함</span>
-                            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-cyan-500"></span> 상태/권한</span>
-                            <button onclick="cy.fit()" class="px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-gray-300">화면 맞춤</button>
-                        </div>
-                    </div>
-                    <!-- Cytoscape Canvas -->
-                    <div id="cy" class="flex-1 border border-bordercolor/60"></div>
-                </div>
-
-                <!-- Discovered Attack Surface Table -->
-                <div class="bg-cardbg border border-bordercolor rounded-xl p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h2 class="font-bold text-white text-sm flex items-center gap-2">
-                            <i data-lucide="list-tree" class="w-4 h-4 text-gray-400"></i> 식별된 공격 표면 (Endpoints)
-                        </h2>
-                        <span id="endpoint-count-badge" class="text-xs text-gray-400">0 항목</span>
-                    </div>
-                    <div class="overflow-x-auto max-h-48 terminal-scroll">
-                        <table class="w-full text-xs text-left">
-                            <thead class="text-gray-400 uppercase bg-gray-900/60 sticky top-0">
-                                <tr>
-                                    <th class="px-3 py-2">Method</th>
-                                    <th class="px-3 py-2">Endpoint Path</th>
-                                    <th class="px-3 py-2">Auth Required</th>
-                                    <th class="px-3 py-2">Source</th>
-                                </tr>
-                            </thead>
-                            <tbody id="endpoint-table-body" class="divide-y divide-gray-800">
-                                <tr><td colspan="4" class="px-3 py-3 text-center text-gray-500">진단이 시작되면 수집된 엔드포인트가 표기됩니다.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right: Choke Point & Live Activity Stream (5 Cols) -->
-            <div class="lg:col-span-5 space-y-4">
-
-                <!-- Choke Point Strategy Card -->
-                <div class="bg-cardbg border border-bordercolor rounded-xl p-4 flex flex-col">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-center space-x-2">
-                            <i data-lucide="shield-check" class="w-4 h-4 text-cybergreen"></i>
-                            <h2 class="font-bold text-white text-sm">최우선 방어 거점 (Choke Point Strategy)</h2>
-                        </div>
-                        <span class="text-xs px-2 py-0.5 rounded bg-emerald-950 text-cybergreen border border-emerald-800">최소 비용 차단</span>
-                    </div>
-
-                    <div id="chokepoint-container" class="space-y-3 flex-1 overflow-y-auto max-h-60 terminal-scroll pr-1">
-                        <div class="p-4 rounded-lg bg-gray-900/60 border border-gray-800 text-center text-xs text-gray-500">
-                            스캔이 완료되면 공격 경로를 끊어낼 수 있는 최우선 방어 거점이 도출됩니다.
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Live Agent Activity Terminal Stream -->
-                <div class="bg-cardbg border border-bordercolor rounded-xl p-4 flex flex-col h-[380px]">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center space-x-2">
-                            <i data-lucide="terminal" class="w-4 h-4 text-cybercyan"></i>
-                            <h2 class="font-bold text-white text-sm">실시간 에이전트 이벤트 스트림</h2>
-                        </div>
-                        <span class="text-xs text-gray-500">SSE Live Stream</span>
-                    </div>
-                    <div id="terminal-logs" class="flex-1 bg-black/60 rounded-lg p-3 font-mono text-xs overflow-y-auto terminal-scroll space-y-1 text-gray-300 border border-gray-800">
-                        <div class="text-gray-500">[System] WVA Dashboard Ready. Press '데모 스캔' to start.</div>
-                    </div>
-                </div>
-
-            </div>
-
-        </div>
-
-    </main>
-
-    <!-- Node Detail Modal -->
-    <div id="node-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-cardbg border border-bordercolor rounded-xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
-            <div class="flex items-center justify-between border-b border-bordercolor pb-3">
-                <h3 id="modal-title" class="font-bold text-white text-base">Node Details</h3>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <div class="space-y-2.5 text-xs text-gray-300">
-                <div><span class="text-gray-500">ID / Type:</span> <span id="modal-id" class="font-mono text-cyan-400"></span></div>
-                <div><span class="text-gray-500">Endpoint:</span> <span id="modal-endpoint" class="font-mono text-gray-200"></span></div>
-                <div><span class="text-gray-500">Severity:</span> <span id="modal-severity" class="font-semibold px-2 py-0.5 rounded"></span></div>
-                <div><span class="text-gray-500">Description / Evidence:</span>
-                    <div id="modal-evidence" class="mt-1 p-2 bg-gray-900 rounded font-mono text-gray-400 border border-gray-800 max-h-32 overflow-y-auto"></div>
-                </div>
-                <div><span class="text-gray-500">Remediation:</span>
-                    <div id="modal-remediation" class="mt-1 p-2 bg-emerald-950/40 text-emerald-300 rounded border border-emerald-900/60"></div>
-                </div>
-            </div>
-            <div class="pt-2 flex justify-end">
-                <button onclick="closeModal()" class="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs font-semibold rounded text-white">닫기</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Script Application Logic -->
-    <script>
-        lucide.createIcons();
-        let cy = null;
-
-        // Initialize Cytoscape
-        function initCy() {
-            cy = cytoscape({
-                container: document.getElementById('cy'),
-                style: [
-                    {
-                        selector: 'node',
-                        style: {
-                            'label': 'data(label)',
-                            'color': '#E5E7EB',
-                            'font-size': '10px',
-                            'text-valign': 'bottom',
-                            'text-margin-y': '6px',
-                            'background-color': '#374151',
-                            'border-width': 2,
-                            'border-color': '#4B5563',
-                            'width': 28,
-                            'height': 28
-                        }
-                    },
-                    {
-                        selector: 'node[type = "state"]',
-                        style: {
-                            'background-color': '#0891B2',
-                            'border-color': '#06B6D4',
-                            'shape': 'round-rectangle',
-                            'width': 36,
-                            'height': 36
-                        }
-                    },
-                    {
-                        selector: 'node[is_in_chain = true]',
-                        style: {
-                            'background-color': '#DC2626',
-                            'border-color': '#EF4444',
-                            'border-width': 3,
-                            'width': 34,
-                            'height': 34
-                        }
-                    },
-                    {
-                        selector: 'node[severity = "CRITICAL"]',
-                        style: { 'background-color': '#991B1B', 'border-color': '#EF4444' }
-                    },
-                    {
-                        selector: 'node[severity = "HIGH"]',
-                        style: { 'background-color': '#C2410C', 'border-color': '#F97316' }
-                    },
-                    {
-                        selector: 'node[severity = "LOW"]',
-                        style: { 'background-color': '#1E3A8A', 'border-color': '#3B82F6' }
-                    },
-                    {
-                        selector: 'edge',
-                        style: {
-                            'width': 2,
-                            'line-color': '#4B5563',
-                            'target-arrow-color': '#4B5563',
-                            'target-arrow-shape': 'triangle',
-                            'curve-style': 'bezier',
-                            'label': 'data(label)',
-                            'font-size': '8px',
-                            'color': '#9CA3AF',
-                            'text-rotation': 'autorotate'
-                        }
-                    }
-                ],
-                layout: { name: 'breadthfirst', directed: true, padding: 25 }
-            });
-
-            cy.on('tap', 'node', function(evt){
-                const node = evt.target;
-                openModal(node.data());
-            });
-        }
-
-        // SSE Connection
-        let eventSource = null;
-        function connectSSE() {
-            if (eventSource) eventSource.close();
-            eventSource = new EventSource('/api/scan/events');
-
-            eventSource.onmessage = function(e) {
-                try {
-                    const payload = JSON.parse(e.data);
-                    handleIncomingEvent(payload);
-                } catch(err) {}
-            };
-        }
-
-        function handleIncomingEvent(msg) {
-            const time = msg.timestamp || new Date().toLocaleTimeString();
-            const logBox = document.getElementById('terminal-logs');
-
-            if (msg.event === 'log') {
-                const line = document.createElement('div');
-                let color = 'text-gray-300';
-                if (msg.data.includes('[Finding]')) color = 'text-amber-400 font-semibold';
-                if (msg.data.includes('[Chain]')) color = 'text-red-400 font-bold';
-                if (msg.data.includes('[State]')) color = 'text-cyan-400';
-                if (msg.data.includes('[ERROR]')) color = 'text-red-500';
-
-                line.className = color;
-                line.textContent = `[${time}] ${msg.data}`;
-                logBox.appendChild(line);
-                logBox.scrollTop = logBox.scrollHeight;
-            } else if (msg.event === 'status') {
-                updateStatusBadge(msg.data.status);
-                if (msg.data.status === 'completed' || msg.data.status === 'error') {
-                    refreshAllData();
-                }
-            } else if (msg.event === 'finding' || msg.event === 'chain' || msg.event === 'endpoint') {
-                refreshAllData();
-            }
-        }
-
-        function updateStatusBadge(status) {
-            const badge = document.getElementById('status-badge');
-            const btnStop = document.getElementById('btn-stop');
-            const btnDemo = document.getElementById('btn-demo');
-            const btnCustom = document.getElementById('btn-custom');
-
-            if (status === 'running') {
-                badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-semibold flex items-center gap-1.5 animate-pulse';
-                badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-cyan-400"></span> SCANNING';
-                btnStop.classList.remove('hidden');
-                btnDemo.disabled = true;
-                btnCustom.disabled = true;
-            } else if (status === 'completed') {
-                badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold flex items-center gap-1.5';
-                badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span> COMPLETED';
-                btnStop.classList.add('hidden');
-                btnDemo.disabled = false;
-                btnCustom.disabled = false;
-            } else {
-                badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700 font-semibold flex items-center gap-1.5';
-                badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-gray-500"></span> IDLE';
-                btnStop.classList.add('hidden');
-                btnDemo.disabled = false;
-                btnCustom.disabled = false;
-            }
-        }
-
-        async function startScan(isDemo) {
-            const target = isDemo ? "http://127.0.0.1:8989" : document.getElementById('target-input').value.trim();
-            if (!target) return alert("타깃 URL을 입력하세요.");
-
-            document.getElementById('terminal-logs').innerHTML = '';
-            try {
-                const res = await fetch('/api/scan/start', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ target_url: target, demo: isDemo })
-                });
-                if (res.ok) {
-                    updateStatusBadge('running');
-                } else {
-                    const err = await res.json();
-                    alert(err.detail || "스캔 시작 실패");
-                }
-            } catch (e) {
-                alert("서버 연결 실패");
-            }
-        }
-
-        async function stopScan() {
-            await fetch('/api/scan/stop', { method: 'POST' });
-            updateStatusBadge('idle');
-        }
-
-        async function refreshAllData() {
-            // 1. Status & Stats
-            const statRes = await fetch('/api/scan/status');
-            const stats = await statRes.json();
-            document.getElementById('stat-endpoints').textContent = stats.endpoints_count;
-            document.getElementById('stat-findings').textContent = stats.findings_count;
-            document.getElementById('stat-chains').textContent = stats.chains_count;
-            document.getElementById('stat-severity').textContent = `${stats.severity.CRITICAL} / ${stats.severity.HIGH}`;
-            document.getElementById('endpoint-count-badge').textContent = `${stats.endpoints_count} 항목`;
-
-            // 2. Graph elements
-            const graphRes = await fetch('/api/scan/graph');
-            const graphData = await graphRes.json();
-            if (graphData.nodes && graphData.nodes.length > 0) {
-                cy.elements().remove();
-                cy.add(graphData.nodes);
-                cy.add(graphData.edges);
-                cy.layout({ name: 'breadthfirst', directed: true, padding: 30 }).run();
-            }
-
-            // 3. Endpoints table
-            const epRes = await fetch('/api/scan/endpoints');
-            const endpoints = await epRes.json();
-            const epTbody = document.getElementById('endpoint-table-body');
-            if (endpoints.length > 0) {
-                epTbody.innerHTML = endpoints.map(ep => `
-                    <tr class="hover:bg-gray-800/40 transition">
-                        <td class="px-3 py-2 font-mono text-cyan-400">${ep.method}</td>
-                        <td class="px-3 py-2 font-mono text-gray-200">${ep.path}</td>
-                        <td class="px-3 py-2">${ep.auth_required ? '<span class="text-amber-400">Yes</span>' : '<span class="text-gray-500">No</span>'}</td>
-                        <td class="px-3 py-2 text-gray-400">${ep.source}</td>
-                    </tr>
-                `).join('');
-            }
-
-            // 4. Chains & Choke Points
-            const chainRes = await fetch('/api/scan/chains');
-            const chains = await chainRes.json();
-            const cpContainer = document.getElementById('chokepoint-container');
-            if (chains.length > 0) {
-                cpContainer.innerHTML = chains.map(c => `
-                    <div class="p-3 rounded-lg bg-gray-900 border border-cyberred/40 space-y-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-red-400 flex items-center gap-1">
-                                <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> ${c.title}
-                            </span>
-                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800">${c.cumulative_severity}</span>
-                        </div>
-                        <p class="text-xs text-gray-400">${c.impact_summary}</p>
-                        <div class="pt-2 border-t border-gray-800 space-y-2">
-                            <span class="text-[11px] font-semibold text-cybergreen block">추천 차단 거점 (Choke Points):</span>
-                            ${c.choke_points.map(cp => `
-                                <div class="p-2 rounded bg-gray-950 border border-gray-800 text-xs space-y-1">
-                                    <div class="flex items-center justify-between">
-                                        <span class="font-mono text-cyan-300">[Step ${cp.step_number}] ${cp.target_endpoint}</span>
-                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400">난이도: ${cp.effort_level}</span>
-                                    </div>
-                                    <p class="text-gray-400 text-[11px]">${cp.recommended_patch}</p>
-                                    <p class="text-gray-500 text-[10px] italic">효과: ${cp.defense_impact}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `).join('');
-                lucide.createIcons();
-            }
-        }
-
-        function openModal(data) {
-            document.getElementById('modal-title').textContent = data.label || 'Node Details';
-            document.getElementById('modal-id').textContent = data.id;
-            document.getElementById('modal-endpoint').textContent = data.endpoint || 'N/A';
-            document.getElementById('modal-severity').textContent = data.severity || 'INFO';
-            document.getElementById('modal-severity').className = `text-xs px-2 py-0.5 rounded font-semibold ${
-                data.severity === 'CRITICAL' ? 'bg-red-950 text-red-400 border border-red-800' :
-                data.severity === 'HIGH' ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-gray-800 text-gray-300'
-            }`;
-            document.getElementById('modal-evidence').textContent = data.remediation ? `권고: ${data.remediation}` : '상태 전이 노드입니다.';
-            document.getElementById('modal-remediation').textContent = data.remediation || '기본 보안 수칙을 준수하세요.';
-            document.getElementById('node-modal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('node-modal').classList.add('hidden');
-        }
-
-        // Initialize on page load
-        window.onload = function() {
-            initCy();
-            connectSSE();
-            refreshAllData();
-        };
-    </script>
+<body>
+<a class="skip" href="#main">본문으로 이동</a>
+<aside class="rail" aria-label="주 메뉴">
+  <a class="brand-mark" href="#overview" aria-label="WVA 진단 화면"><img src="/static/mark.svg" alt="" width="30" height="30"></a>
+  <nav>
+    <button class="nav-item active" data-view="overview" aria-label="진단 결과" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z"/></svg><span>진단</span></button>
+    <button class="nav-item" data-view="chains" aria-label="연계 경로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h5a5 5 0 0 1 5 5v5M4 4h6v6H4zm10 10h6v6h-6z"/></svg><span>경로</span></button>
+    <button class="nav-item" data-view="endpoints" aria-label="공격 표면"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5M5 17v-4h14v4M9 3h6v5H9zM2 17h6v4H2zm14 0h6v4h-6z"/></svg><span>표면</span></button>
+    <button class="nav-item" data-view="logs" aria-label="진단 로그"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 7 5 5-5 5m8 0h6M3 3h18v18H3z"/></svg><span>로그</span></button>
+    <button class="nav-item" data-view="save" aria-label="정보 저장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3zm3 0v6h8V3M7 21v-7h10v7"/></svg><span>저장</span></button>
+  </nav><span class="rail-version">v2.1</span>
+</aside>
+<div class="workspace">
+  <header class="topbar"><div class="wordmark">WVA <span>Web Vulnerability Auditor</span></div><div class="top-actions"><span class="local-indicator">로컬 실행</span><button class="text-button" id="shutdown">앱 종료</button></div></header>
+  <main id="main">
+    <div class="title-row"><h1 id="page-title">웹 대상 진단</h1><button class="button secondary" id="go-save">정보 저장 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button></div>
+    <section id="target-section" class="target-section" aria-label="진단 대상 설정">
+      <form id="scan-form"><label for="target">진단할 서버 주소</label><div class="target-row"><div class="target-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18"/></svg><input id="target" name="target" type="url" placeholder="http://127.0.0.1:8990" autocomplete="url" spellcheck="false" required></div><button class="button primary" type="submit" id="start">진단 시작</button><button class="button secondary" type="button" id="stop" hidden>진단 중단</button></div></form>
+      <div class="target-tools"><button class="text-button" id="demo">로컬 데모 실행</button></div>
+    </section>
+    <div id="error" role="alert" class="error-message" hidden></div>
+    <section id="scan-state" class="scan-state" data-state="idle" aria-label="진단 상태">
+      <div class="scan-state-heading"><div class="status-main"><span class="scan-symbol" aria-hidden="true"><span class="scan-spinner"></span><svg class="scan-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 6"/></svg></span><strong id="status" role="status" aria-live="polite">진단 대기</strong><span id="scope" class="scope">—</span></div><span id="elapsed" class="mono">—</span></div>
+      <ol id="scan-phases" class="scan-phases" aria-label="진단 단계" hidden></ol><div class="scan-track" aria-hidden="true"><span></span></div>
+    </section>
+    <section id="metrics" class="metrics" aria-label="결과 요약">
+      <div class="metric"><span>발견 항목</span><div><strong id="count-findings">0</strong><span class="unit">건</span></div></div>
+      <div class="metric"><span>연계 경로</span><div><strong id="count-chains">0</strong><span class="unit">건</span></div></div>
+      <div class="metric"><span>확인된 엔드포인트</span><div><strong id="count-endpoints">0</strong><span class="unit">개</span></div></div>
+    </section>
+    <section id="overview-view" class="view">
+      <section id="risk-charts" class="chart-grid" aria-label="발견 항목 분포" hidden>
+        <div class="panel chart-panel"><div class="panel-heading"><h2>위험도별 발견 항목</h2><span class="muted">건</span></div><div id="severity-chart" class="chart-host"></div></div>
+        <div class="panel chart-panel"><div class="panel-heading"><h2>CVSS 점수 분포</h2><span class="muted">건</span></div><div id="cvss-chart" class="chart-host"></div></div>
+      </section>
+      <section class="panel" aria-labelledby="findings-title"><div class="panel-heading"><h2 id="findings-title">발견 항목</h2><span id="finding-total" class="muted">0건</span></div>
+        <div class="filters"><label class="search-field" for="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="search" type="search" placeholder="항목·경로·증거 검색"></label><label class="sr-only" for="severity">위험도 필터</label><select id="severity"><option value="">모든 위험도</option><option value="CRITICAL">심각</option><option value="HIGH">높음</option><option value="MEDIUM">중간</option><option value="LOW">낮음</option><option value="INFO">정보</option></select></div>
+        <div class="table-scroll" tabindex="0" aria-label="발견 항목 표"><table class="findings-table"><thead><tr><th scope="col">위험도</th><th scope="col">발견 항목 / CWE</th><th scope="col">경로 / 메서드</th><th scope="col" class="numeric">CVSS</th><th scope="col">증거 요약</th><th scope="col">조치 요약</th></tr></thead><tbody id="findings-body"></tbody></table></div><p id="findings-empty" class="empty-text">발견 항목 0건</p>
+      </section>
+    </section>
+    <section id="chains-view" class="view" hidden>
+      <section class="panel"><div class="panel-heading"><h2>취약점 연계 경로</h2><span id="chain-count" class="muted">0건</span></div><div id="chains-list"></div></section>
+      <section class="panel"><div class="panel-heading"><h2>연관된 발견 항목</h2><span id="related-count" class="muted">0건</span></div><div class="table-scroll" tabindex="0" aria-label="경로 관련 발견 항목 표"><table class="findings-table"><thead><tr><th>위험도</th><th>발견 항목 / CWE</th><th>경로 / 메서드</th><th class="numeric">CVSS</th><th>증거 요약</th><th>조치 요약</th></tr></thead><tbody id="related-body"></tbody></table></div><p id="related-empty" class="empty-text">연관된 발견 항목 0건</p></section>
+    </section>
+    <section id="endpoints-view" class="view" hidden>
+      <div class="context-line"><span>진단 대상</span><strong class="current-target">—</strong></div>
+      <section class="surface-summary" aria-label="공격 표면 요약"><div><span>응답 측정</span><strong id="surface-measured">0</strong></div><div><span>문서·링크 발견</span><strong id="surface-unmeasured">0</strong></div><div><span>인증 거부 응답</span><strong id="surface-auth">0</strong></div><div class="technology"><span>응답 기술 정보</span><strong id="surface-tech">—</strong></div></section>
+      <section class="panel"><div class="panel-heading"><h2>공격 표면</h2><div class="surface-filter"><label class="sr-only" for="endpoint-search">공격 표면 검색</label><input id="endpoint-search" type="search" placeholder="경로·매개변수 검색"></div></div><div class="table-scroll" tabindex="0" aria-label="공격 표면 상세 표"><table class="surface-table"><thead><tr><th>메서드 / HTTP</th><th>경로</th><th>매개변수</th><th>콘텐츠 유형</th><th class="numeric">응답 ms / bytes</th><th>수집 출처 / 확인 시각</th><th>발견 항목</th></tr></thead><tbody id="endpoints-body"></tbody></table></div><p id="endpoints-empty" class="empty-text">엔드포인트 0개</p></section>
+      <section class="panel"><div class="panel-heading"><h2>응답 보안 헤더</h2></div><div class="table-scroll" tabindex="0" aria-label="응답 보안 헤더 표"><table class="headers-table"><thead><tr><th>경로</th><th>CSP</th><th>HSTS</th><th>콘텐츠 유형 보호</th><th>프레임 보호</th><th>CORS 허용 출처</th></tr></thead><tbody id="headers-body"></tbody></table></div></section>
+    </section>
+    <section id="logs-view" class="view" hidden>
+      <div class="context-line"><span>진단 대상</span><strong class="current-target">—</strong></div>
+      <section class="panel storage-locations"><div class="panel-heading"><h2>로그 저장 위치</h2><span class="muted">UTF-8</span></div><dl><div><dt>현재 진단 로그 · JSONL</dt><dd id="scan-log-path">—</dd></div><div><dt>앱 실행·오류 로그</dt><dd id="app-log-path">—</dd></div></dl><p id="log-error" role="alert" hidden></p></section>
+      <section class="panel"><div class="panel-heading"><h2>진단 로그</h2><span class="muted">최근 100줄 · 한국 시간</span></div><ol id="logs" class="logs"></ol><p id="logs-empty" class="empty-text">진단 로그 0줄</p></section>
+    </section>
+    <section id="save-view" class="view" hidden>
+      <div class="context-line"><span>저장 대상</span><strong class="current-target">—</strong><span id="save-scan-id" class="mono"></span></div>
+      <section class="panel"><div class="panel-heading"><h2>저장 가능한 정보</h2></div><dl class="save-descriptions"><div><dt>진단 요약</dt><dd>발견 항목·연계 경로·엔드포인트 수와 위험도별 건수</dd></div><div><dt>발견 항목</dt><dd>위험도, CVSS, CWE, 요청 경로, 증거, 순서별 조치·완료 기준과 수정 후 확인 방법</dd></div><div><dt>연계 경로</dt><dd>단계별 발견 항목, 전제 조건, 도달 권한과 연결 차단점</dd></div><div><dt>공격 표면</dt><dd>경로·메서드·응답 코드·응답 시간·크기·매개변수·응답 헤더</dd></div><div><dt>진단 로그</dt><dd>현재 진단의 파일에 기록된 전체 활동과 시각</dd></div></dl></section>
+      <form id="export-form" class="panel export-panel"><fieldset><legend>저장할 정보</legend><div id="export-sections" class="export-sections"></div></fieldset><fieldset><legend>저장 형식</legend><div class="format-options"><label><input type="radio" name="format" value="json" checked><span>JSON</span><small>구조화 데이터</small></label><label><input type="radio" name="format" value="md"><span>Markdown</span><small>상세 보고서</small></label><label><input type="radio" name="format" value="csv"><span>CSV</span><small>표·Excel용</small></label></div></fieldset><div class="export-bottom"><div><p id="export-summary">5개 항목 · JSON</p><p class="muted">모든 파일에 대상 주소·진단 ID·시각이 포함됩니다.</p></div><button id="export-button" type="submit" class="button primary" disabled>선택 정보 저장</button></div><p id="save-result" role="status" aria-live="polite" class="save-result">진단 완료 후 저장 가능</p></form>
+    </section>
+    <footer>WVA <span class="mono">2.1</span></footer>
+  </main>
+</div>
+<dialog id="finding-dialog" aria-labelledby="detail-title"><div class="dialog-header"><div><span id="detail-id" class="mono"></span><h2 id="detail-title">발견 항목</h2></div><button id="close-detail" class="icon-button" aria-label="상세 창 닫기" autofocus><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div id="detail-content" class="dialog-content"></div></dialog>
+<noscript>JavaScript를 활성화하세요.</noscript>
 </body>
 </html>

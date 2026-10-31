@@ -10,7 +10,6 @@ __pycache__/
 
 # Test Lab & Temporary Files (Managed separately)
 test_lab/
-tests/
 3_WVA_단위테스트_검증.bat
 RUN_WVA_PYTEST_VERIFICATION.bat
 
@@ -23,3 +22,16 @@ ARTEX-main.zip
 *.tmp
 *.bak
 README_안내.txt
+
+# Generated build and local test outputs
+build/
+dist/
+*.spec
+tests/artifacts/
+tests/.lab-*.json
+logs/
+.taste-skill/
+
+# Generated audit sessions stay local; reviewed draft reports remain tracked.
+/reports/[0-9]*.json
+/reports/[0-9]*.md

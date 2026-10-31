@@ -1,0 +1,14 @@
+{
+  "product": "WVA",
+  "version": "2.1.0",
+  "date": "2026-11-01",
+  "platform": "Windows x64",
+  "file": "WVA.exe",
+  "bytes": 26134820,
+  "sha256": "9f660e29c52abff80c9c8317e1046f0cc4222299e9165282b1b2e935e8266ca4",
+  "functional_checks": 48,
+  "executable_checks": 21,
+  "browser_checks": 22,
+  "test_guide": "tests/TEST_GUIDE.md",
+  "default_port": 9030
+}

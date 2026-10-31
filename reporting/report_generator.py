@@ -1,6 +1,8 @@
 import json
 from typing import Dict, Any
 from core.graph.blackboard import SecurityBlackboard
+from reporting.remediation import finding_details
+from reporting.selected_export import ordered_action_lines
 
 class SecurityReportGenerator:
     """
@@ -17,6 +19,7 @@ class SecurityReportGenerator:
 
         report = []
         report.append("# Web Vulnerability & Attack Path Chaining Analysis Report\n")
+        report.append("> 범위: 정해진 경로와 휴리스틱 기반 점검 결과입니다. 연계 경로는 관찰된 응답을 바탕으로 추론하며, 전체 취약점 탐지나 실제 권한 장악을 보증하지 않습니다.\n")
         report.append(f"- **Target URL**: `{bb.target_url}`")
         report.append(f"- **Discovered Endpoints**: {len(bb.asset.endpoints)}")
         report.append(f"- **Total Individual Findings**: {len(findings)}")
@@ -71,7 +74,10 @@ class SecurityReportGenerator:
             report.append(f"- **CVSS Score**: {f.cvss_score}")
             report.append(f"- **Description**: {f.description}")
             report.append(f"- **Evidence**: `{f.evidence}`")
-            report.append(f"- **Remediation**: {f.remediation}\n")
+            details = finding_details(f)["remediation_details"]
+            report.append(f"- **Remediation**: {details['summary']}\n")
+            report += ["#### 조치 순서", ""] + ordered_action_lines(details)
+            report += ["", "#### 수정 후 확인", ""] + ["- " + check for check in details["verification"]] + [""]
 
         # 3. Discovered Surface
         report.append("## 3. Discovered Attack Surface Endpoints\n")
@@ -85,9 +91,11 @@ class SecurityReportGenerator:
     def generate_json_report(self) -> Dict[str, Any]:
         bb = self.blackboard
         return {
+            "schema": "wva-report-2",
+            "assessment_scope": "Heuristic read-only checks; inferred attack paths; not SARIF or a complete penetration test.",
             "target_url": bb.target_url,
             "endpoints": [ep.model_dump() for ep in bb.asset.endpoints],
-            "findings": [f.model_dump() for f in bb.get_findings_list()],
+            "findings": [finding_details(f) for f in bb.get_findings_list()],
             "exploit_chains": [c.model_dump() for c in bb.chains],
             "activity_logs": bb.activity_logs
         }

@@ -28,6 +28,9 @@ class ChainPlannerAgent(BaseAuditor):
                     resp = await client.get(url, headers=headers, timeout=5.0)
 
                     if resp.status_code == 200:
+                        data = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
+                        if not isinstance(data, dict) or data.get("privilege") not in ("ADMIN", "admin"):
+                            continue
                         evidence = f"Harvested API Key '{key_art.value[:6]}...' successfully unlocked {path}. Admin status: 200 OK"
                         finding = VulnerabilityFinding(
                             id=f"VULN-PRIVESC-ADMIN-{path.replace('/', '_')}",

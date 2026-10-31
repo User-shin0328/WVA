@@ -41,6 +41,9 @@ class IdorAndBolaAuditor(BaseAuditor):
                                 if "role" in k.lower():
                                     leaked_role = str(v)
 
+                        # A generic 200 (for example an export status) is not proof of BOLA.
+                        if not isinstance(data, dict) or str(data.get("user_id", "")) != uid or not (leaked_key or leaked_role):
+                            continue
                         evidence = f"Endpoint returned 200 OK for user_id={uid} without session auth. Role: {leaked_role}"
                         yielded_post = {
                             "bola_confirmed": True,

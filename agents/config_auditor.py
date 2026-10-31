@@ -21,6 +21,10 @@ class ConfigAndHeaderAuditor(BaseAuditor):
         except Exception as e:
             self.blackboard.log(f"[Auditor:Config] Base URL check failed: {e}")
 
+        for ep in list(self.blackboard.asset.endpoints):
+            if ep.path != "/" and ep.method == "GET":
+                await self._audit_cors(client, base_url, ep.path)
+
         # 2. Check for Debug/Information Disclosure Endpoints
         debug_endpoints = ["/debug/version", "/debug/config", "/api/v1/info"]
         for path in debug_endpoints:
@@ -77,7 +81,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
             flags_missing = []
             if not cookie.secure:
                 flags_missing.append("Secure")
-            if not cookie.has_nonstandard_attr("httponly") and not getattr(cookie, "httponly", False):
+            if "httponly" not in {key.lower() for key in cookie._rest}:
                 flags_missing.append("HttpOnly")
 
             if flags_missing:
@@ -104,8 +108,8 @@ class ConfigAndHeaderAuditor(BaseAuditor):
             acao = resp.headers.get("access-control-allow-origin")
             acac = resp.headers.get("access-control-allow-credentials")
 
-            if acao == "*" or acao == test_origin:
-                if acac == "true" or acao == test_origin:
+            if acao == test_origin:
+                if acac and acac.lower() == "true":
                     self.blackboard.add_finding(
                         VulnerabilityFinding(
                             id=f"VULN-CORS-{endpoint.replace('/', '_')}",

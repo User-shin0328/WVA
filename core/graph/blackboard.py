@@ -30,7 +30,15 @@ class SecurityBlackboard:
         self.emit("log", message)
 
     def add_endpoint(self, endpoint: HttpEndpoint):
-        if not self.asset.find_endpoint(endpoint.path, endpoint.method):
+        endpoint.sources = list(dict.fromkeys([*endpoint.sources, endpoint.source]))
+        existing = self.asset.find_endpoint(endpoint.path, endpoint.method)
+        if existing:
+            existing.sources = list(dict.fromkeys([existing.source, *existing.sources, *endpoint.sources]))
+            existing.parameters = list(dict.fromkeys([*existing.parameters, *endpoint.parameters]))
+            if endpoint.status_code is not None:
+                for field in ("status_code", "content_type", "response_time_ms", "response_bytes", "checked_at", "headers", "auth_required"):
+                    setattr(existing, field, getattr(endpoint, field))
+        else:
             self.asset.endpoints.append(endpoint)
             self.log(f"[Asset] Discovered endpoint: {endpoint.method} {endpoint.path}")
             self.emit("endpoint", endpoint.model_dump())
@@ -52,7 +60,7 @@ class SecurityBlackboard:
                     description=finding.title
                 )
                 self.state.add_artifact(artifact)
-                self.log(f"[State] Added Leaked Artifact: {artifact.artifact_type.value} -> {artifact.key}={artifact.value}")
+                self.log(f"[State] Added Leaked Artifact: {artifact.artifact_type.value} -> {artifact.key}=[REDACTED]")
                 self.emit("artifact", artifact.model_dump())
 
     def add_chain(self, chain: ExploitChain):
