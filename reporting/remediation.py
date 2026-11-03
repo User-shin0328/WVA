@@ -1,4 +1,5 @@
 """Consistent, finding-specific remediation for details and selected exports."""
+from reporting.risk_context import risk_context
 RULES = {
     "EXPOSED_DEBUG_ENDPOINT": {
         "summary": "운영 디버그 경로 비활성화 및 접근 제한",
@@ -98,4 +99,5 @@ def finding_details(finding):
     elif key == "HSTS":
         details["verification"] = ["HTTPS 응답의 Strict-Transport-Security 값과 적용 범위를 확인합니다.", "유효한 인증서와 정상 기능이 유지되는지 확인합니다."]
     data["remediation_details"] = details
+    data["risk_context"] = risk_context(data, key)
     return data

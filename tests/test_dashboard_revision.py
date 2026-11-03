@@ -76,7 +76,7 @@ async def test_selected_export_formats_and_detailed_remediation(client, format):
         assert response.content.startswith(b"\xef\xbb\xbf")
         rows = list(csv.reader(io.StringIO(response.text.lstrip("\ufeff"))))
         assert len(rows) == 7  # column headings + metadata + 5 findings
-        assert all(len(row) == 22 for row in rows)
+        assert all(len(row) == 25 for row in rows)
         assert rows[2][0] == "발견 항목"
         assert rows[2][13].startswith("1. ") and "완료 기준:" in rows[2][13]
 

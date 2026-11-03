@@ -152,7 +152,7 @@ async def index():
 
 @app.get("/api/health")
 async def health():
-    return {"product": "WVA", "version": "2.2.0", "status": "ok"}
+    return {"product": "WVA", "version": "2.3.0", "status": "ok"}
 
 @app.post("/api/scan/start")
 async def start_scan(req: ScanRequest):

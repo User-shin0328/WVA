@@ -2,6 +2,7 @@ import json
 from typing import Dict, Any
 from core.graph.blackboard import SecurityBlackboard
 from reporting.remediation import finding_details
+from reporting.risk_context import risk_context_lines
 from reporting.selected_export import ordered_action_lines
 
 class SecurityReportGenerator:
@@ -74,7 +75,9 @@ class SecurityReportGenerator:
             report.append(f"- **CVSS Score**: {f.cvss_score}")
             report.append(f"- **Description**: {f.description}")
             report.append(f"- **Evidence**: `{f.evidence}`")
-            details = finding_details(f)["remediation_details"]
+            enriched = finding_details(f)
+            report += risk_context_lines(enriched["risk_context"])
+            details = enriched["remediation_details"]
             report.append(f"- **Remediation**: {details['summary']}\n")
             report += ["#### 조치 순서", ""] + ordered_action_lines(details)
             report += ["", "#### 수정 후 확인", ""] + ["- " + check for check in details["verification"]] + [""]

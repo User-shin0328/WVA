@@ -87,20 +87,30 @@ function detailBlock(title){const section=el('section','detail-block');section.a
 function openFinding(id){
   const f=findings.find(x=>x.id===id);if(!f)return;selected=id;
   $('detail-title').textContent=label(f);$('detail-id').textContent=f.id;
+  const risk=f.risk_context||{summary:f.remediation_details?.impact||f.description,observation:'관찰 증거 원문을 확인하세요.',assessment:'추가 검토 필요',attacks:[],limits:[],references:[]};
+  const overview=detailBlock('문제 요약');overview.classList.add('detail-overview');overview.append(el('p','detail-lead',risk.summary));
   const metrics=el('dl','detail-metrics');
-  for(const [name,value,cls]of [['위험도',severityNames[f.severity],'severity '+f.severity],['CVSS',f.cvss_score.toFixed(1),'mono'],['CWE',f.cwe_id||'—','mono'],['메서드',f.method,'mono']]){const cell=el('div');cell.append(el('dt','',name),el('dd',cls,value));metrics.append(cell);}
-  const location=detailBlock('요청 경로');const requestUrl=new URL(f.request_url||f.endpoint,snapshot?.target_url||window.location.href);const entryUrl=new URL(snapshot?.target_url||window.location.href);if(!f.request_url&&requestUrl.pathname===entryUrl.pathname)requestUrl.search=entryUrl.search;location.append(el('p','mono',f.method+' '+requestUrl.href));
-  const impact=detailBlock('영향과 관찰 범위');impact.append(el('p','',f.remediation_details?.impact||f.description));
-  const evidence=detailBlock('관찰 증거');evidence.append(el('pre','',f.evidence));
-  const remediation=detailBlock('권고사항 · 조치 순서');remediation.append(el('p','',f.remediation_details?.summary||f.remediation));
+  for(const [name,value,cls]of [['위험도',severityNames[f.severity],'severity '+f.severity],['CVSS 참고 점수',f.cvss_score.toFixed(1),'mono']]){const cell=el('div');cell.append(el('dt','',name),el('dd',cls,value));metrics.append(cell);}
+  const observed=detailBlock('확인한 내용');observed.append(el('p','detail-assessment',risk.assessment),el('p','',risk.observation));
+  const requestUrl=new URL(f.request_url||f.endpoint,snapshot?.target_url||window.location.href);const entryUrl=new URL(snapshot?.target_url||window.location.href);if(!f.request_url&&requestUrl.pathname===entryUrl.pathname)requestUrl.search=entryUrl.search;observed.append(el('p','mono detail-request',f.method+' '+requestUrl.href));
+  const evidence=el('details','detail-evidence');evidence.append(el('summary','','관찰 증거 원문'),el('pre','',f.evidence));observed.append(evidence);
+  const limits=detailBlock('판정 범위');const limitList=el('ul','detail-limits');for(const limit of risk.limits)limitList.append(el('li','',limit));limits.append(limitList);
+  const attacks=detailBlock('가능한 공격');const scenarios=el('ol','attack-scenarios');
+  for(const attack of risk.attacks){const item=el('li');item.append(el('h4','',attack.name),el('p','',attack.scenario),el('p','conditions-label','성립 조건'));const conditions=el('ul');for(const condition of attack.conditions)conditions.append(el('li','',condition));item.append(conditions);scenarios.append(item);}
+  attacks.append(risk.attacks.length?scenarios:el('p','','이 유형의 공격 설명은 아직 등록되지 않았습니다. 증거를 추가 검토해야 합니다.'));
+  const remediation=detailBlock('권고사항 · 조치 순서');const actionsToggle=el('button','text-button','모든 조치 펼치기');actionsToggle.type='button';actionsToggle.id='toggle-actions';actionsToggle.setAttribute('aria-expanded','false');const heading=el('div','detail-section-heading');heading.append(remediation.firstChild,actionsToggle);remediation.append(heading,el('p','',f.remediation_details?.summary||f.remediation));
   const actions=el('ol','remediation-steps');
   const steps=f.remediation_details?.steps||(f.remediation_details?.actions||[f.remediation]).map((action,index)=>({order:index+1,title:'조치 '+(index+1),action}));
-  for(const step of steps){const item=el('li');item.value=step.order;item.append(el('h4','',step.title),el('p','',step.action));if(step.expected_result)item.append(el('p','step-result','완료 기준: '+step.expected_result));actions.append(item);}
+  const updateToggle=()=>{const all=[...actions.querySelectorAll('details')].every(n=>n.open);actionsToggle.textContent=all?'모든 조치 접기':'모든 조치 펼치기';actionsToggle.setAttribute('aria-expanded',String(all));};
+  for(const [index,step]of steps.entries()){const item=el('li');item.value=step.order;const fold=el('details','action-step');fold.open=index===0;const title=el('summary');title.append(el('span','step-order',step.order+'.'),el('h4','',step.title));const body=el('div','action-step-body');body.append(el('p','',step.action));if(step.expected_result)body.append(el('p','step-result','완료 기준: '+step.expected_result));fold.append(title,body);fold.addEventListener('toggle',updateToggle);item.append(fold);actions.append(item);}
+  actionsToggle.addEventListener('click',()=>{const expand=actionsToggle.getAttribute('aria-expanded')!=='true';for(const n of actions.querySelectorAll('details'))n.open=expand;updateToggle();});
   remediation.append(actions);
   const verify=detailBlock('수정 후 확인');const checks=el('ul');for(const check of f.remediation_details?.verification||[])checks.append(el('li','',check));verify.append(checks);
-  const original=el('details','detail-original');original.append(el('summary','','원문 설명 및 권고'),el('p','',f.description),el('p','',f.remediation));
-  $('detail-content').replaceChildren(metrics,location,impact,evidence,remediation,verify,original);$('detail-content').scrollTop=0;
+  const original=el('details','detail-original');original.append(el('summary','','기술 정보 및 원문'),el('p','mono',f.id),el('p','mono','CWE: '+(f.cwe_id||'—')+' · '+f.method),el('p','',f.description),el('p','',f.remediation));
+  for(const reference of risk.references){const p=el('p');const link=el('a','',reference.title);link.href=reference.url;link.target='_blank';link.rel='noopener noreferrer';p.append(link);original.append(p);}
+  $('detail-content').replaceChildren(overview,metrics,observed,attacks,limits,remediation,verify,original);
   if(!$('finding-dialog').open)$('finding-dialog').showModal();
+  $('detail-content').scrollTop=0;requestAnimationFrame(()=>{$('detail-content').scrollTop=0;});
 }
 function renderChains(){
   const blocks=chains.map(chain=>{

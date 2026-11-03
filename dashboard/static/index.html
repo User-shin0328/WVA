@@ -15,7 +15,7 @@
     <button class="nav-item" data-view="endpoints" aria-label="공격 표면"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5M5 17v-4h14v4M9 3h6v5H9zM2 17h6v4H2zm14 0h6v4h-6z"/></svg><span>표면</span></button>
     <button class="nav-item" data-view="logs" aria-label="진단 로그"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 7 5 5-5 5m8 0h6M3 3h18v18H3z"/></svg><span>로그</span></button>
     <button class="nav-item" data-view="save" aria-label="정보 저장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3zm3 0v6h8V3M7 21v-7h10v7"/></svg><span>저장</span></button>
-  </nav><span class="rail-version">v2.2</span>
+  </nav><span class="rail-version">v2.3</span>
 </aside>
 <div class="workspace">
   <header class="topbar"><div class="wordmark">WVA <span>Web Vulnerability Auditor</span></div><div class="top-actions"><span class="local-indicator">로컬 실행</span><button class="text-button" id="shutdown">앱 종료</button></div></header>
@@ -65,10 +65,10 @@
       <section class="panel"><div class="panel-heading"><h2>저장 가능한 정보</h2></div><dl class="save-descriptions"><div><dt>진단 요약</dt><dd>발견 항목·연계 경로·엔드포인트 수와 위험도별 건수</dd></div><div><dt>발견 항목</dt><dd>위험도, CVSS, CWE, 요청 경로, 증거, 순서별 조치·완료 기준과 수정 후 확인 방법</dd></div><div><dt>연계 경로</dt><dd>단계별 발견 항목, 전제 조건, 도달 권한과 연결 차단점</dd></div><div><dt>공격 표면</dt><dd>경로·메서드·응답 코드·응답 시간·크기·매개변수·응답 헤더</dd></div><div><dt>진단 로그</dt><dd>현재 진단의 파일에 기록된 전체 활동과 시각</dd></div></dl></section>
       <form id="export-form" class="panel export-panel"><fieldset><legend>저장할 정보</legend><div id="export-sections" class="export-sections"></div></fieldset><fieldset><legend>저장 형식</legend><div class="format-options"><label><input type="radio" name="format" value="json" checked><span>JSON</span><small>구조화 데이터</small></label><label><input type="radio" name="format" value="md"><span>Markdown</span><small>상세 보고서</small></label><label><input type="radio" name="format" value="csv"><span>CSV</span><small>표·Excel용</small></label></div></fieldset><div class="export-bottom"><div><p id="export-summary">5개 항목 · JSON</p><p class="muted">모든 파일에 대상 주소·진단 ID·시각이 포함됩니다.</p></div><button id="export-button" type="submit" class="button primary" disabled>선택 정보 저장</button></div><p id="save-result" role="status" aria-live="polite" class="save-result">진단 완료 후 저장 가능</p></form>
     </section>
-    <footer>WVA <span class="mono">2.2</span></footer>
+    <footer>WVA <span class="mono">2.3</span></footer>
   </main>
 </div>
-<dialog id="finding-dialog" aria-labelledby="detail-title"><div class="dialog-header"><div><span id="detail-id" class="mono"></span><h2 id="detail-title">발견 항목</h2></div><button id="close-detail" class="icon-button" aria-label="상세 창 닫기" autofocus><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div id="detail-content" class="dialog-content"></div></dialog>
+<dialog id="finding-dialog" aria-labelledby="detail-title"><div class="dialog-header"><div><span id="detail-id" hidden></span><h2 id="detail-title">발견 항목</h2></div><button id="close-detail" class="icon-button" aria-label="상세 창 닫기" autofocus><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div id="detail-content" class="dialog-content"></div></dialog>
 <noscript>JavaScript를 활성화하세요.</noscript>
 </body>
 </html>
