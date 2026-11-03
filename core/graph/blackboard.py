@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional, Any, Callable
+from urllib.parse import urlsplit, urlunsplit
 from core.models.asset import WebAsset, HttpEndpoint
 from core.models.state import SecurityState, LeakedArtifact, LeakedArtifactType
 from core.models.vulnerability import VulnerabilityFinding, ExploitChain
@@ -30,8 +31,10 @@ class SecurityBlackboard:
         self.emit("log", message)
 
     def add_endpoint(self, endpoint: HttpEndpoint):
+        parsed = urlsplit(endpoint.url)
+        endpoint.url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, ""))
         endpoint.sources = list(dict.fromkeys([*endpoint.sources, endpoint.source]))
-        existing = self.asset.find_endpoint(endpoint.path, endpoint.method)
+        existing = self.asset.find_endpoint(endpoint.path, endpoint.method, endpoint.url)
         if existing:
             existing.sources = list(dict.fromkeys([existing.source, *existing.sources, *endpoint.sources]))
             existing.parameters = list(dict.fromkeys([*existing.parameters, *endpoint.parameters]))

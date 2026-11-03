@@ -12,3 +12,6 @@ dialog{width:calc((100vw - 72px)*.75);max-width:none;height:75vh;max-height:calc
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;scroll-behavior:auto!important}.scan-state[data-state="running"] .scan-spinner{border-color:var(--accent)}.scan-state[data-state="running"] .scan-track span{width:100%;opacity:.35}}
 .chart-host .chart-slice{stroke:var(--panel);stroke-width:2;stroke-linejoin:round}.chart-host .chart-empty{fill:none;stroke:var(--line);stroke-width:1}.chart-host .chart-slice:hover{stroke:var(--text)}
 .detail-block .remediation-steps{margin-top:12px}.detail-block .remediation-steps>li{padding:12px 0}.remediation-steps h4{font-size:14px;font-weight:500;margin:0 0 6px}.detail-block .remediation-steps .step-result{font-size:13px;color:var(--muted);margin-top:6px}
+
+/* Scope is an explicit choice; stage labels are shown only while running. */
+.target-tools{justify-content:space-between;align-items:center;gap:16px;margin-top:12px}.target-tools .scope-choice{display:flex;align-items:center;gap:12px;margin:0;min-width:0;color:var(--muted)}.scope-choice select{max-width:230px;font-size:13px;height:36px}.scan-phases{flex-wrap:wrap;gap:8px 24px}@media(max-width:600px){.target-tools{flex-wrap:wrap;gap:8px}.target-tools .scope-choice{flex-wrap:wrap;gap:8px}.scope-choice select{max-width:100%}}

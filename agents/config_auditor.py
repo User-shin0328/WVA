@@ -10,25 +10,29 @@ class ConfigAndHeaderAuditor(BaseAuditor):
     and passive information disclosure endpoints.
     """
     async def audit(self, client: httpx.AsyncClient):
-        base_url = self.blackboard.target_url.rstrip("/")
+        base_url = self.governance.origin_url
+        entry_path = self.governance.entry_path
 
         # 1. Audit root and base endpoints for security headers
         try:
-            resp = await client.get(base_url, timeout=5.0)
-            self._audit_headers(resp, "/")
-            self._audit_cookies(resp, "/")
-            await self._audit_cors(client, base_url, "/")
+            resp = await client.get(self.governance.target_base_url, timeout=5.0)
+            self._audit_headers(resp, entry_path)
+            self._audit_cookies(resp, entry_path)
+            await self._audit_cors(client, base_url, entry_path)
         except Exception as e:
             self.blackboard.log(f"[Auditor:Config] Base URL check failed: {e}")
 
         for ep in list(self.blackboard.asset.endpoints):
-            if ep.path != "/" and ep.method == "GET":
-                await self._audit_cors(client, base_url, ep.path)
+            if ep.url != str(httpx.URL(self.governance.target_base_url).copy_with(path=entry_path)) and ep.method == "GET":
+                await self._audit_cors(client, base_url, ep.path, ep.url)
 
         # 2. Check for Debug/Information Disclosure Endpoints
-        debug_endpoints = ["/debug/version", "/debug/config", "/api/v1/info"]
-        for path in debug_endpoints:
-            url = f"{base_url}{path}"
+        debug_endpoints = self.governance.probe_paths(["/debug/version", "/debug/config", "/api/v1/info"])
+        debug_endpoints += [ep.path for ep in self.blackboard.asset.endpoints if ep.path.endswith(("/debug/version", "/debug/config", "/api/v1/info"))]
+        for path in dict.fromkeys(debug_endpoints):
+            url = self.governance.url_for_path(path)
+            if not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(path):
+                continue
             try:
                 d_resp = await client.get(url, timeout=5.0)
                 if d_resp.status_code == 200:
@@ -48,6 +52,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                     title="Missing Content-Security-Policy (CSP)",
                     severity=Severity.LOW,
                     endpoint=endpoint,
+                    request_url=str(resp.request.url),
                     description="The server does not enforce a Content-Security-Policy header, reducing defense-in-depth against XSS and content injection.",
                     evidence=f"HTTP Response Headers did not contain 'content-security-policy'",
                     cwe_id="CWE-1021",
@@ -67,6 +72,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                     title="Missing Strict-Transport-Security (HSTS)",
                     severity=Severity.LOW,
                     endpoint=endpoint,
+                    request_url=str(resp.request.url),
                     description="The web server is served over HTTPS but lacks HSTS header to enforce encrypted connections.",
                     evidence=f"HSTS header missing on HTTPS endpoint",
                     cwe_id="CWE-319",
@@ -92,6 +98,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                         title=f"Insecure Cookie Flags ({cookie.name})",
                         severity=Severity.LOW,
                         endpoint=endpoint,
+                        request_url=str(resp.request.url),
                         description=f"Cookie '{cookie.name}' is missing security flags: {', '.join(flags_missing)}.",
                         evidence=f"Cookie {cookie.name}: Secure={cookie.secure}",
                         cwe_id="CWE-1004",
@@ -101,10 +108,13 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                     )
                 )
 
-    async def _audit_cors(self, client: httpx.AsyncClient, base_url: str, endpoint: str):
+    async def _audit_cors(self, client: httpx.AsyncClient, base_url: str, endpoint: str, request_url=None):
         test_origin = "https://evil-attacker.com"
         try:
-            resp = await client.get(f"{base_url}{endpoint}", headers={"Origin": test_origin}, timeout=5.0)
+            url = request_url or self.governance.url_for_path(endpoint)
+            if not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(endpoint):
+                return
+            resp = await client.get(url, headers={"Origin": test_origin}, timeout=5.0)
             acao = resp.headers.get("access-control-allow-origin")
             acac = resp.headers.get("access-control-allow-credentials")
 
@@ -117,6 +127,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                             title="Permissive CORS Origin Reflection",
                             severity=Severity.MEDIUM,
                             endpoint=endpoint,
+                            request_url=str(resp.request.url),
                             description=f"The application reflects arbitrary origin '{test_origin}' with Access-Control-Allow-Credentials: true, allowing cross-origin credentialed reads.",
                             evidence=f"ACAO: {acao}, ACAC: {acac}",
                             cwe_id="CWE-346",
@@ -162,6 +173,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                     title=f"Sensitive Information Disclosure at {endpoint}",
                     severity=Severity.LOW,
                     endpoint=endpoint,
+                    request_url=str(resp.request.url),
                     description=f"Debug endpoint exposes internal identifiers and system metadata without authentication.",
                     evidence=f"Disclosed metadata: {evidence_str}",
                     cwe_id="CWE-200",

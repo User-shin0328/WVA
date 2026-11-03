@@ -1,4 +1,5 @@
 import httpx
+from urllib.parse import urlsplit, parse_qs
 from agents.base import BaseAuditor
 from core.models.vulnerability import VulnerabilityFinding, VulnerabilityType, Severity
 from core.models.state import LeakedArtifactType, PrivilegeLevel
@@ -10,23 +11,28 @@ class IdorAndBolaAuditor(BaseAuditor):
     and verifies whether arbitrary object data can be read without proper authorization.
     """
     async def audit(self, client: httpx.AsyncClient):
-        base_url = self.blackboard.target_url.rstrip("/")
 
         # Gather candidate user IDs: from blackboard state + standard test fixtures
         candidate_ids = []
+        candidate_ids.extend(parse_qs(urlsplit(self.blackboard.target_url).query).get("user_id", []))
         for art in self.blackboard.get_artifacts(LeakedArtifactType.USER_ID):
             candidate_ids.append(art.value)
         if not candidate_ids:
             candidate_ids.extend(["1001", "usr_staging_99"])
 
         # Target endpoints known or discovered for user profiles/objects
-        target_paths = ["/api/v1/user/profile", "/api/user/profile", "/api/v1/user/export"]
+        target_paths = self.governance.probe_paths(["/api/v1/user/profile", "/api/user/profile", "/api/v1/user/export"])
+        target_paths += [ep.path for ep in self.blackboard.asset.endpoints if ep.method == "GET" and
+                         (any(p.split(":")[-1] == "user_id" for p in ep.parameters) or ep.path.endswith(("/user/profile", "/user/export")))]
 
-        for path in target_paths:
+        for path in dict.fromkeys(target_paths):
+            url = self.governance.url_for_path(path)
+            if not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(path):
+                continue
             for uid in candidate_ids:
                 try:
-                    url = f"{base_url}{path}"
-                    resp = await client.get(url, params={"user_id": uid}, timeout=5.0)
+                    request_url = httpx.URL(url).copy_merge_params({"user_id": uid})
+                    resp = await client.get(request_url, timeout=5.0)
 
                     if resp.status_code == 200:
                         data = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
@@ -63,6 +69,7 @@ class IdorAndBolaAuditor(BaseAuditor):
                             title=f"Broken Object Level Authorization (BOLA) at {path}",
                             severity=Severity.HIGH,
                             endpoint=path,
+                            request_url=str(resp.request.url),
                             description=f"Unauthenticated request with user_id={uid} retrieved full user profile data and credentials.",
                             evidence=evidence,
                             cwe_id="CWE-639",

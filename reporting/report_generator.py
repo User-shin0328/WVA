@@ -70,7 +70,7 @@ class SecurityReportGenerator:
 
         for f in findings:
             report.append(f"### [{f.severity.value}] {f.title}")
-            report.append(f"- **Endpoint**: `{f.method} {f.endpoint}`")
+            report.append(f"- **Endpoint**: `{f.method} {f.request_url or f.endpoint}`")
             report.append(f"- **CVSS Score**: {f.cvss_score}")
             report.append(f"- **Description**: {f.description}")
             report.append(f"- **Evidence**: `{f.evidence}`")
@@ -94,6 +94,7 @@ class SecurityReportGenerator:
             "schema": "wva-report-2",
             "assessment_scope": "Heuristic read-only checks; inferred attack paths; not SARIF or a complete penetration test.",
             "target_url": bb.target_url,
+            "scan_scope": bb.asset.metadata,
             "endpoints": [ep.model_dump() for ep in bb.asset.endpoints],
             "findings": [finding_details(f) for f in bb.get_findings_list()],
             "exploit_chains": [c.model_dump() for c in bb.chains],

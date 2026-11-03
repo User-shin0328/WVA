@@ -9,7 +9,7 @@ const exportNames = {summary:'진단 요약',findings:'발견 항목',chains:'�
 const phases = ['연결','표면 탐색','설정 점검','접근 제어','경로 분석'];
 const sources = {surface_discovery:'경로 탐색',link_parser:'HTML 링크',form_parser:'HTML 폼',openapi:'API 문서'};
 let snapshot=null,findings=[],chains=[],endpoints=[],logs=[],surface={},selected=null;
-let renderKey='',refreshing=false,starting=false,shuttingDown=false,exporting=false,activeView='overview';
+let renderKey='',refreshing=false,starting=false,stopping=false,shuttingDown=false,exporting=false,activeView='overview';
 
 function el(tag,className,text){const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;}
 function label(f){if(f.id.startsWith('VULN-CSP'))return '콘텐츠 보안 정책(CSP) 누락';if(f.id.startsWith('VULN-HSTS'))return 'HTTPS 강제 정책(HSTS) 누락';return typeNames[f.vuln_type]||f.title;}
@@ -34,9 +34,9 @@ function renderStatus(){
   if($('scan-state').dataset.state!==displayState)$('scan-state').dataset.state=displayState;
   $('status').textContent=running?'진단 중':statusNames[s.status]||s.status;$('scope').textContent=s.target_url?(s.demo?'로컬 데모 · ':'')+s.target_url:'—';$('elapsed').textContent=duration();
   $('count-findings').textContent=s.findings_count.toLocaleString();$('count-chains').textContent=s.chains_count.toLocaleString();$('count-endpoints').textContent=s.endpoints_count.toLocaleString();
-  $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('demo').disabled=running;$('stop').hidden=!running;
-  $('scan-phases').hidden=!s.scan_id&&!starting;
-  $('scan-phases').replaceChildren(...phases.map((name,index)=>{const item=el('li',s.status==='completed'||index<(s.phase||0)?'done':index===(s.phase||0)&&running?'current':'',name);if(index===(s.phase||0)&&running)item.setAttribute('aria-current','step');return item;}));
+  $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('scope-mode').disabled=running;$('demo').disabled=running;$('stop').hidden=!running;$('stop').disabled=starting||stopping;
+  $('scan-phases').hidden=!running;
+  const phase=starting?0:(s.phase||0);$('scan-phases').replaceChildren(...phases.map((name,index)=>{const item=el('li',index<phase?'done':index===phase&&running?'current':'',name);if(index===phase&&running)item.setAttribute('aria-current','step');return item;}));
   for(const n of document.querySelectorAll('.current-target'))n.textContent=s.target_url||'—';
   $('scan-log-path').textContent=s.log_path||'—';$('app-log-path').textContent=s.app_log_path||'—';$('log-error').textContent=s.log_error||'';$('log-error').hidden=!s.log_error;$('save-scan-id').textContent=s.scan_id||'';
   if(s.error)error(s.error);updateExport();
@@ -89,7 +89,7 @@ function openFinding(id){
   $('detail-title').textContent=label(f);$('detail-id').textContent=f.id;
   const metrics=el('dl','detail-metrics');
   for(const [name,value,cls]of [['위험도',severityNames[f.severity],'severity '+f.severity],['CVSS',f.cvss_score.toFixed(1),'mono'],['CWE',f.cwe_id||'—','mono'],['메서드',f.method,'mono']]){const cell=el('div');cell.append(el('dt','',name),el('dd',cls,value));metrics.append(cell);}
-  const location=detailBlock('요청 경로');location.append(el('p','mono',f.method+' '+(snapshot?.target_url||'')+f.endpoint));
+  const location=detailBlock('요청 경로');const requestUrl=new URL(f.request_url||f.endpoint,snapshot?.target_url||window.location.href);const entryUrl=new URL(snapshot?.target_url||window.location.href);if(!f.request_url&&requestUrl.pathname===entryUrl.pathname)requestUrl.search=entryUrl.search;location.append(el('p','mono',f.method+' '+requestUrl.href));
   const impact=detailBlock('영향과 관찰 범위');impact.append(el('p','',f.remediation_details?.impact||f.description));
   const evidence=detailBlock('관찰 증거');evidence.append(el('pre','',f.evidence));
   const remediation=detailBlock('권고사항 · 조치 순서');remediation.append(el('p','',f.remediation_details?.summary||f.remediation));
@@ -116,7 +116,7 @@ function renderEndpoints(){
   const query=$('endpoint-search').value.trim().toLowerCase();const list=endpoints.filter(ep=>!query||[ep.path,...ep.parameters,ep.method,...ep.sources||[]].join(' ').toLowerCase().includes(query));
   $('endpoints-body').replaceChildren(...list.map(ep=>{
     const row=el('tr');const method=el('td');method.append(el('span','mono',ep.method),el('span','subline',ep.status_code===null?'미측정':'HTTP '+ep.status_code));
-    const route=el('td');route.append(el('span','endpoint',ep.path));
+    const route=el('td');route.append(el('span','endpoint',ep.path+new URL(ep.url).search));
     const parameters=el('td','',ep.parameters.join(', ')||'—');const size=el('td','numeric');size.append(el('span','mono',ep.response_time_ms===null?'—':ep.response_time_ms.toFixed(1)),el('span','subline',ep.response_bytes===null?'—':ep.response_bytes.toLocaleString()+' B'));
     const source=el('td');source.append(el('span','',([...new Set([ep.source,...ep.sources||[]])]).map(s=>sources[s]||s).join(' · ')),el('span','subline',timeLabel(ep.checked_at)));
     const count=findings.filter(f=>f.endpoint===ep.path&&f.method===ep.method).length;
@@ -138,7 +138,7 @@ function renderAll(){renderFindings();renderCharts();renderChains();renderEndpoi
 async function refresh(force=false){
   if(refreshing||shuttingDown)return;refreshing=true;
   try{
-    const s=await api('/api/scan/status');const key=[s.scan_id,s.status,s.findings_count,s.chains_count,s.endpoints_count].join('|');const changed=force||key!==renderKey;snapshot=s;renderStatus();
+    const s=await api('/api/scan/status');if(!snapshot&&s.scan_id){$('scope-mode').value=s.scope_mode||'path';if(!s.demo)$('target').value=s.target_url;}const key=[s.scan_id,s.status,s.findings_count,s.chains_count,s.endpoints_count].join('|');const changed=force||key!==renderKey;snapshot=s;renderStatus();
     if(changed||s.status==='running'){
       const data=await Promise.all(['/api/scan/findings','/api/scan/chains','/api/scan/endpoints','/api/scan/logs','/api/scan/surface'].map(p=>api(p)));
       [findings,chains,endpoints,logs,surface]=data;findings.sort((a,b)=>severityRank[a.severity]-severityRank[b.severity]);renderKey=key;renderAll();
@@ -147,12 +147,12 @@ async function refresh(force=false){
 }
 async function start(demo=false){
   if(starting||snapshot?.status==='running')return;starting=true;error('');if($('finding-dialog').open)$('finding-dialog').close();
-  $('start').disabled=true;$('demo').disabled=true;$('scan-state').dataset.state='running';$('status').textContent='진단 중';
+  $('start').disabled=true;$('demo').disabled=true;$('scope-mode').disabled=true;$('scan-state').dataset.state='running';$('status').textContent='진단 중';if(snapshot)renderStatus();
   try{
-    const target=demo?'http://127.0.0.1:8989':$('target').value.trim();const result=await post('/api/scan/start',{target_url:target,demo});
+    const target=demo?'http://127.0.0.1:8989':$('target').value.trim();const scopeMode=demo?'path':$('scope-mode').value;const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode});
     selected=null;findings=[];chains=[];endpoints=[];logs=[];surface={};renderKey='';$('save-result').textContent='진단 완료 후 저장 가능';
-    snapshot={...snapshot,status:'running',scan_id:result.scan_id,target_url:result.target_url,demo,findings_count:0,chains_count:0,endpoints_count:0,phase:0,started_at:new Date().toISOString(),finished_at:null,error:'',log_path:''};renderStatus();renderAll();await refresh(true);
-  }catch(exc){error(exc.message);}finally{starting=false;if(snapshot)renderStatus();else{$('start').disabled=false;$('demo').disabled=false;$('scan-state').dataset.state='idle';$('status').textContent='진단 대기';}}
+    snapshot={...snapshot,status:'running',scan_id:result.scan_id,target_url:result.target_url,scope_mode:result.scope_mode,demo,findings_count:0,chains_count:0,endpoints_count:0,phase:0,started_at:new Date().toISOString(),finished_at:null,error:'',log_path:''};renderStatus();renderAll();await refresh(true);
+  }catch(exc){error(exc.message);}finally{starting=false;if(snapshot)renderStatus();else{$('start').disabled=false;$('demo').disabled=false;$('scope-mode').disabled=false;$('scan-phases').hidden=true;$('scan-state').dataset.state='idle';$('status').textContent='진단 대기';}}
 }
 async function saveSelected(event){
   event.preventDefault();if(exporting)return;const sections=[...$('export-sections').querySelectorAll('input:checked')].map(n=>n.value);if(!sections.length)return;
@@ -164,7 +164,7 @@ async function saveSelected(event){
   }catch(exc){error(exc.message);}finally{exporting=false;updateExport();}
 }
 $('scan-form').addEventListener('submit',event=>{event.preventDefault();start(false);});$('demo').addEventListener('click',()=>start(true));
-$('stop').addEventListener('click',async()=>{try{$('stop').disabled=true;await post('/api/scan/stop');await refresh(true);}catch(exc){error(exc.message);}finally{$('stop').disabled=false;}});
+$('stop').addEventListener('click',async()=>{if(starting||stopping)return;stopping=true;renderStatus();try{await post('/api/scan/stop');await refresh(true);}catch(exc){error(exc.message);}finally{stopping=false;renderStatus();}});
 $('search').addEventListener('input',renderFindings);$('severity').addEventListener('change',renderFindings);$('endpoint-search').addEventListener('input',renderEndpoints);
 $('go-save').addEventListener('click',()=>setView('save'));for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>setView(b.dataset.view));
 $('close-detail').addEventListener('click',()=>$('finding-dialog').close());$('finding-dialog').addEventListener('close',()=>{selected=null;});

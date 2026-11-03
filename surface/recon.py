@@ -1,9 +1,10 @@
 import httpx
 from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin, urlsplit as urlparse, parse_qs
 from datetime import datetime, timezone
 from time import perf_counter
+from collections import deque
 
 from core.models.asset import HttpEndpoint
 from core.graph.blackboard import SecurityBlackboard
@@ -35,17 +36,16 @@ class SurfaceReconEngine:
         ]
 
     async def run_discovery(self, client: httpx.AsyncClient) -> List[HttpEndpoint]:
-        base_url = self.blackboard.target_url.rstrip("/")
         discovered: List[HttpEndpoint] = []
-
-        for path in self.common_paths:
-            if not self.governance.is_safe_endpoint(path):
+        queue = deque([self.governance.target_base_url] + [self.governance.url_for_path(path) for path in self.governance.probe_paths(self.common_paths)])
+        visited = set()
+        # Follow HTML links within the selected boundary; schema operations stay passive.
+        while queue and len(visited) < 80:
+            target_url = str(httpx.URL(queue.popleft()).copy_with(fragment=None))
+            path = urlparse(target_url).path or "/"
+            if target_url in visited or not self.governance.is_in_scope(target_url) or not self.governance.is_safe_endpoint(path):
                 continue
-
-            target_url = urljoin(base_url, path)
-            if not self.governance.is_in_scope(target_url):
-                continue
-
+            visited.add(target_url)
             try:
                 request_start = perf_counter()
                 resp = await client.get(target_url, timeout=5.0)
@@ -55,6 +55,7 @@ class SurfaceReconEngine:
                         url=target_url,
                         method="GET",
                         path=path,
+                        parameters=list(parse_qs(urlparse(target_url).query, keep_blank_values=True)),
                         auth_required=(resp.status_code in [401, 403]),
                         source="surface_discovery",
                         status_code=resp.status_code,
@@ -72,9 +73,12 @@ class SurfaceReconEngine:
 
                     # Passive HTML parsing for additional links and forms
                     if "text/html" in resp.headers.get("content-type", ""):
-                        self._parse_html_links_and_forms(resp.text, base_url)
-                    if path in ("/openapi.json", "/swagger.json") and resp.status_code == 200:
-                        self._parse_openapi(resp, base_url)
+                        self._parse_html_links_and_forms(resp.text, target_url)
+                        for item in self.blackboard.asset.endpoints:
+                            if item.method == "GET" and "link_parser" in item.sources and item.url not in visited and len(queue) < 160:
+                                queue.append(item.url)
+                    if path.endswith(("/openapi.json", "/swagger.json")) and resp.status_code == 200:
+                        self._parse_openapi(resp, self.governance.origin_url)
 
                     # Check for tech stack headers
                     server = resp.headers.get("server")
@@ -88,6 +92,8 @@ class SurfaceReconEngine:
                 # Target endpoint unreachable or timeout
                 continue
 
+        if queue:
+            self.blackboard.log("[Surface] 경로 탐색 상한 80개에 도달했습니다. 나머지 링크는 요청하지 않았습니다.")
         return discovered
 
     def _parse_html_links_and_forms(self, html_content: str, base_url: str):
@@ -97,7 +103,7 @@ class SurfaceReconEngine:
         for form in soup.find_all("form"):
             action = form.get("action") or ""
             method = (form.get("method") or "GET").upper()
-            full_url = urljoin(base_url, action)
+            full_url = urljoin(base_url, action).split("#", 1)[0]
             path = urlparse(full_url).path
 
             params = []
@@ -119,7 +125,7 @@ class SurfaceReconEngine:
         # Parse links
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            full_url = urljoin(base_url, href)
+            full_url = urljoin(base_url, href).split("#", 1)[0]
             path = urlparse(full_url).path
             if self.governance.is_in_scope(full_url) and self.governance.is_safe_endpoint(path):
                 ep = HttpEndpoint(

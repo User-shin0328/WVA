@@ -1,6 +1,6 @@
 # WVA 테스트 상세 설명 · 예상 결과 · 결과보고서
 
-갱신 기준: 2026-11-01, Windows 10 x64. 이 문서는 테스트 순서와 판정 기준을 설명하며, 마지막의 자동 생성 결과보고서에 실제 수행 결과를 합칩니다.
+갱신 기준: 2026-11-03, Windows 10 x64. 이 문서는 테스트 순서와 판정 기준을 설명하며, 마지막의 자동 생성 결과보고서에 실제 수행 결과를 합칩니다.
 
 ## 1. 테스트 목표와 구성
 
@@ -47,14 +47,14 @@ powershell -ExecutionPolicy Bypass -File .\tests\Setup-TestEnvironment.ps1
 .\.venv\Scripts\python.exe -m tests.run_tests
 ```
 
-예상 결과: 총 48개 테스트가 통과합니다. 아래는 파라미터 조합을 포함한 분류입니다.
+예상 결과: 총 69개 테스트가 통과합니다. 아래는 파라미터 조합을 포함한 분류입니다.
 
 | 검증 | 개수 | 상세 예상 결과 |
 | --- | ---: | --- |
 | 동일 출처 허용 | 2 | 같은 HTTPS 출처의 기본 포트 표기 여부는 동일하게 허용 |
 | 출처 이탈 차단 | 7 | 하위 도메인·다른 호스트·다른 포트·HTTP 전환·파일 주소·계정 포함 주소는 거부 |
 | 위험 경로 차단 | 5 | 삭제·초기화·구매 경로와 URL 인코딩된 위험 경로를 차단 |
-| 잘못된 대상 입력 | 8 | 스킴 누락·비 HTTP·계정·잘못된 포트·하위 경로·쿼리·공백을 검증 오류로 반환 |
+| 잘못된 대상 입력 | 8 | 스킴 누락·비 HTTP·URL 내 계정·잘못된 포트·화면 위치·제어 문자·공백을 거부 |
 | 초기 상태·보고서 제한 | 1 | 초기 결과 0, 빈 그래프, 완료 전 보고서 409 |
 | 로컬 요청 경계 | 1 | 외부 Origin 403, 폼 제출 415, 외부 Host 400 |
 | 쿠키 속성 오탐 방지 | 1 | Secure·HttpOnly 쿠키를 누락으로 보고하지 않음 |
@@ -73,6 +73,12 @@ powershell -ExecutionPolicy Bypass -File .\tests\Setup-TestEnvironment.ps1
 | CSV 데이터 보존 | 1 | 쉼표·줄바꿈 보존, 수식으로 해석될 수 있는 셀 값 보호 |
 | API 문서 읽기 전용 수집 | 1 | 문서의 새 경로를 수집하되 선언된 작업 및 스코프 밖 경로를 실행하지 않음 |
 | 보안 헤더 조치 구분 | 2 | CSP 조치에 HSTS 단계가 섞이지 않고 HSTS 조치에 CSP 보고 모드가 섞이지 않음 |
+| 경로·쿼리 보존 | 4 | 하위 경로·중복 및 빈 매개변수·값 끝의 슬래시를 보존 |
+| 모호한 시작 경로 거부 | 3 | 입력의 상위 경로 표현 때문에 선택 범위가 서버 루트로 확대되지 않음 |
+| 경로 범위 이탈 차단 | 8 | 유사 접두사·상위 경로·인코딩 우회·다른 출처의 실제 요청을 거부 |
+| 범위 선택과 쿼리 전달 | 1 | 경로/서버 선택 검증, 입력 쿼리를 다른 경로에 복제하지 않음 |
+| URL별 엔드포인트 식별 | 1 | 다른 쿼리는 분리하되 루트 슬래시 유무는 중복 집계하지 않음 |
+| 마운트 경로·직접 쿼리·서버 범위·API 통합 | 4 | 실제 로컬 요청 경계, 상대 링크, 쿼리 보존, 경로 연계와 완료 상태 확인 |
 
 실제 실패 시: `tests/artifacts/pytest-output.txt`의 실패 항목과 `pytest.xml`을 확인합니다. 명령을 다시 실행하면 이 문서 마지막의 실제 결과가 갱신됩니다.
 
@@ -92,7 +98,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\Setup-TestEnvironment.ps1
 
 예상 결과:
 
-- 시작 시 스피너·진행선, 완료 시 체크 모션이 나옵니다. 단계 표시는 실제 단계 로그에서 얻습니다.
+- 시작 시 스피너·진행선, 완료 시 체크 모션이 나옵니다. 단계 표시는 실제 단계 로그에서 얻으며 진단 중에만 보입니다. 완료·실패·중단 뒤에는 다섯 단계 문구를 숨깁니다. 시작 요청이 수락되기 전에는 중단 버튼이 비활성화됩니다.
 - 발견 항목 5건, 연계 경로 1건, 엔드포인트 8개입니다. 수치 옆의 추가 설명은 표시하지 않습니다.
 - 위험도 분포: 심각 1 / 높음 1 / 중간 1 / 낮음 2 / 정보 0.
 - 위험도와 CVSS 분포는 원형 차트로 표시합니다. 범례의 건수·비율과 실제 항목 수가 일치해야 하며, 0건인 분류는 원형 조각을 만들지 않습니다.
@@ -171,7 +177,7 @@ node .\tests\ui_check.cjs
 
 다른 환경에서는 Playwright가 설치된 `node_modules` 경로를 `WVA_NODE_MODULES`, Edge/Chrome 경로를 `WVA_BROWSER`로 지정합니다. 대시보드 주소는 `WVA_TEST_URL`, 테스트 대상은 `WVA_LAB_URL`로 바꿀 수 있습니다.
 
-예상 결과: 22개 검증이 통과합니다. 소개 멘트·우선 조치 제거, 진단 중·완료 모션, 차트 합계, 확장 표, 75% 상세 창, 경로 화면 유지, 표면 정보, 로그 위치, 저장 항목과 3종 형식, 1440/768/390px 페이지 넘침 없음, 새로고침 복원, 모션 감소 설정, 외부 자산 요청 0과 JavaScript 예외 0을 확인합니다. 넓은 표는 자체 가로 스크롤을 사용합니다. 스크린샷은 `tests/artifacts/browser/`에 저장됩니다.
+예상 결과: 29개 검증이 통과합니다. 기존 화면·차트·저장·반응형 검증 22건에 URL 범위 검증 7건을 추가했습니다. 추가 검증은 임시 로컬 서버를 직접 시작하고 종료합니다. 경로 이탈 차단, 상대 링크와 쿼리 구분, 실제 요청 URL, 390px 범위 선택, 직접 쿼리와 새로고침, 서버 전체 선택, 중단·실패 후 단계 문구 숨김을 확인합니다. 넓은 표는 자체 가로 스크롤을 사용합니다. 스크린샷은 `tests/artifacts/browser/`에 저장됩니다.
 
 디자인은 Impeccable과 테이스트스킬의 앱 화면 기준을 적용했습니다. 어두운 표면, 흰 글씨, 청록색 1px 선, 실제 데이터 수치, 선택한 항목의 증거를 중심으로 구성했습니다. 자동 디자인 검사 결과는 스타일 관련 보조 판단이며 실제 기능 통과 결과와 구분합니다.
 
@@ -187,32 +193,53 @@ node .\tests\ui_check.cjs
 <!-- RESULTS:START -->
 ### 수행 환경과 검증 범위
 
-- 보고서 갱신 시각: 2026-11-01T03:18:10+09:00
+- 보고서 갱신 시각: 2026-11-03T11:26:27+09:00
 - 운영체제: Windows-10-10.0.19045-SP0
 - Python: 3.12.14
-- 기능 테스트: **48/48 PASS**
+- 기능 테스트: **69/69 PASS**
 - 외부 운영 사이트 진단은 수행하지 않았습니다. 로컬 실습 환경에 대한 검증입니다.
 
 ### 기능 테스트 상세 결과
 
 | 실제 테스트 | 결과 | 소요 |
 | --- | --- | ---: |
-| `test_surface_measured_metadata_and_openapi` | PASS | 0.594초 |
-| `test_persistent_utf8_scan_log_and_rotation` | PASS | 0.855초 |
-| `test_selected_export_formats_and_detailed_remediation[json]` | PASS | 0.459초 |
-| `test_selected_export_formats_and_detailed_remediation[md]` | PASS | 0.446초 |
-| `test_selected_export_formats_and_detailed_remediation[csv]` | PASS | 0.453초 |
+| `test_surface_measured_metadata_and_openapi` | PASS | 0.536초 |
+| `test_persistent_utf8_scan_log_and_rotation` | PASS | 0.880초 |
+| `test_selected_export_formats_and_detailed_remediation[json]` | PASS | 0.453초 |
+| `test_selected_export_formats_and_detailed_remediation[md]` | PASS | 0.404초 |
+| `test_selected_export_formats_and_detailed_remediation[csv]` | PASS | 0.452초 |
 | `test_header_remediation_does_not_mix_unrelated_policies[CSP]` | PASS | 0.001초 |
 | `test_header_remediation_does_not_mix_unrelated_policies[HSTS]` | PASS | 0.000초 |
 | `test_export_selection_validation[sections0-json]` | PASS | 0.005초 |
-| `test_export_selection_validation[sections1-json]` | PASS | 0.006초 |
-| `test_export_selection_validation[sections2-md]` | PASS | 0.006초 |
-| `test_export_selection_validation[sections3-xlsx]` | PASS | 0.006초 |
-| `test_export_requires_completed_current_scan_and_full_disk_logs` | PASS | 0.454초 |
-| `test_csv_preserves_rows_and_blocks_formulas` | PASS | 0.001초 |
+| `test_export_selection_validation[sections1-json]` | PASS | 0.004초 |
+| `test_export_selection_validation[sections2-md]` | PASS | 0.004초 |
+| `test_export_selection_validation[sections3-xlsx]` | PASS | 0.004초 |
+| `test_export_requires_completed_current_scan_and_full_disk_logs` | PASS | 0.443초 |
+| `test_csv_preserves_rows_and_blocks_formulas` | PASS | 0.000초 |
 | `test_openapi_discovery_never_executes_declared_operations` | PASS | 0.004초 |
+| `test_entry_path_and_query_are_preserved[https://example.com/app/]` | PASS | 0.000초 |
+| `test_entry_path_and_query_are_preserved[https://example.com/app/login?next=%2Fapp%2F&lang=ko]` | PASS | 0.000초 |
+| `test_entry_path_and_query_are_preserved[http://127.0.0.1:8990?empty=&tag=a&tag=b]` | PASS | 0.000초 |
+| `test_entry_path_and_query_are_preserved[https://example.com/api/item?value=tail/]` | PASS | 0.000초 |
+| `test_ambiguous_entry_path_cannot_expand_the_scope_to_root[/app/..]` | PASS | 0.000초 |
+| `test_ambiguous_entry_path_cannot_expand_the_scope_to_root[/app/%2e%2e/]` | PASS | 0.001초 |
+| `test_ambiguous_entry_path_cannot_expand_the_scope_to_root[/app/%252e%252e/]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/application]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/private]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/../private]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/%2e%2e/private]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/%252e%252e/private]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/%255c..%255cprivate]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://other.test/app/item]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[http://example.com/app/item]` | PASS | 0.000초 |
+| `test_scope_choice_is_explicit_and_query_not_copied_to_other_paths` | PASS | 0.000초 |
+| `test_query_variants_are_distinct_but_root_slash_is_not` | PASS | 0.001초 |
+| `test_mounted_app_follows_relative_links_and_keeps_actual_boundary` | PASS | 0.418초 |
+| `test_direct_query_endpoint_preserves_other_parameters_during_id_check` | PASS | 0.311초 |
+| `test_origin_choice_can_probe_root_but_still_requests_the_entry` | PASS | 0.404초 |
+| `test_dashboard_accepts_path_query_and_reports_selected_scope` | PASS | 0.409초 |
 | `test_same_origin_allowed[https://example.com/]` | PASS | 0.001초 |
-| `test_same_origin_allowed[https://example.com:443]` | PASS | 0.000초 |
+| `test_same_origin_allowed[https://example.com:443]` | PASS | 0.001초 |
 | `test_outside_origin_blocked[https://sub.example.com]` | PASS | 0.001초 |
 | `test_outside_origin_blocked[https://example.com.evil.test]` | PASS | 0.001초 |
 | `test_outside_origin_blocked[http://example.com]` | PASS | 0.000초 |
@@ -225,49 +252,49 @@ node .\tests\ui_check.cjs
 | `test_destructive_paths_blocked[/%2564elete]` | PASS | 0.000초 |
 | `test_destructive_paths_blocked[/reset-db]` | PASS | 0.000초 |
 | `test_destructive_paths_blocked[/purchase]` | PASS | 0.000초 |
-| `test_invalid_target_rejected[example.com]` | PASS | 0.001초 |
+| `test_invalid_target_rejected[example.com]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[ftp://example.com]` | PASS | 0.000초 |
-| `test_invalid_target_rejected[https://a:b@example.com]` | PASS | 0.001초 |
-| `test_invalid_target_rejected[http://localhost:99999]` | PASS | 0.001초 |
+| `test_invalid_target_rejected[https://a:b@example.com]` | PASS | 0.000초 |
+| `test_invalid_target_rejected[http://localhost:99999]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[http://localhost:0]` | PASS | 0.000초 |
-| `test_invalid_target_rejected[http://localhost/path]` | PASS | 0.000초 |
-| `test_invalid_target_rejected[http://localhost?x=1]` | PASS | 0.000초 |
+| `test_invalid_target_rejected[http://localhost/#section]` | PASS | 0.000초 |
+| `test_invalid_target_rejected[http://localhost/%0Aprivate]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[http://local host]` | PASS | 0.000초 |
-| `test_empty_state_and_report_gate` | PASS | 0.008초 |
-| `test_cross_origin_and_form_blocked` | PASS | 0.006초 |
+| `test_empty_state_and_report_gate` | PASS | 0.009초 |
+| `test_cross_origin_and_form_blocked` | PASS | 0.011초 |
 | `test_secure_cookie_is_not_false_positive` | PASS | 0.001초 |
 | `test_cors_requires_credentialed_reflection[*-true-0]` | PASS | 0.002초 |
 | `test_cors_requires_credentialed_reflection[https://evil-attacker.com-false-0]` | PASS | 0.002초 |
 | `test_cors_requires_credentialed_reflection[https://evil-attacker.com-true-1]` | PASS | 0.002초 |
-| `test_vulnerable_demo_and_reports` | PASS | 0.463초 |
-| `test_direct_target_hardened_profile` | PASS | 0.407초 |
-| `test_unreachable_target_is_error` | PASS | 2.046초 |
+| `test_vulnerable_demo_and_reports` | PASS | 0.440초 |
+| `test_direct_target_hardened_profile` | PASS | 0.409초 |
+| `test_unreachable_target_is_error` | PASS | 2.091초 |
 | `test_duplicate_start_cancel_and_reset` | PASS | 0.012초 |
 | `test_events_broadcast_and_replay` | PASS | 0.003초 |
-| `test_redirects_do_not_escape_scope` | PASS | 0.556초 |
+| `test_redirects_do_not_escape_scope` | PASS | 0.545초 |
 
 ### 실행파일 독립 실행 결과
 
 - 결과: **PASS**
-- 수행 시각: 2026-11-01T03:14:55.243270+09:00
-- 실행파일 SHA-256: `9f660e29c52abff80c9c8317e1046f0cc4222299e9165282b1b2e935e8266ca4`
-- 실행파일 크기: 26,134,820 bytes
+- 수행 시각: 2026-11-03T11:25:23.583016+09:00
+- 실행파일 SHA-256: `0166f4cc22719c461aca877ae382831f2a7d09285df49bb6354b4a001631b5ab`
+- 실행파일 크기: 26,139,917 bytes
 
 | 검증 항목 | 결과 | 실제 결과 |
 | --- | --- | --- |
 | standalone_health | PASS | Copied exe starts from Korean path, no project sources |
-| bundled_asset:/ | PASS | {"status": 200, "bytes": 11944} |
-| bundled_asset:/static/app.css | PASS | {"status": 200, "bytes": 20845} |
-| bundled_asset:/static/app.js | PASS | {"status": 200, "bytes": 21622} |
+| bundled_asset:/ | PASS | {"status": 200, "bytes": 12167} |
+| bundled_asset:/static/app.css | PASS | {"status": 200, "bytes": 21377} |
+| bundled_asset:/static/app.js | PASS | {"status": 200, "bytes": 22309} |
 | bundled_asset:/static/fonts/NotoSansKR.ttf | PASS | {"status": 200, "bytes": 10414588} |
 | bundled_asset:/static/fonts/IBMPlexMono-Regular.ttf | PASS | {"status": 200, "bytes": 135580} |
 | start_demo | PASS | Embedded lab starts without Python subprocess |
-| demo_result | PASS | {"status": "completed", "target_url": "http://127.0.0.1:13547", "endpoints_count": 8, "findings_count": 5, "chains_count": 1, "severity": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 1, "LOW": 2, "INFO": 0}, "error": "", "scan_id": "c28b2b997569", "started_at": "2026-10-31T18:14:57.750647+00:00", "finished_at": "2026-10-31T18:14:58.078416+00:00", "demo": true, "report_paths": ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261101_031457_c28b2b997569.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261101_031457_c28b2b997569.json"], "phase": 4, "log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\scans\\20261101_031457_c28b2b997569.jsonl", "log_error": "", "app_log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\WVA.log"} |
+| demo_result | PASS | {"status": "completed", "target_url": "http://127.0.0.1:5398", "endpoints_count": 8, "findings_count": 5, "chains_count": 1, "severity": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 1, "LOW": 2, "INFO": 0}, "error": "", "scan_id": "cdd3882dddc9", "started_at": "2026-11-03T02:25:26.594879+00:00", "finished_at": "2026-11-03T02:25:27.009866+00:00", "demo": true, "report_paths": ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261103_112526_cdd3882dddc9.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261103_112526_cdd3882dddc9.json"], "phase": 4, "scope_mode": "path", "log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\scans\\20261103_112526_cdd3882dddc9.jsonl", "log_error": "", "app_log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\WVA.log"} |
 | report_download | PASS | 5 findings in downloaded JSON |
-| report_persistence | PASS | ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261101_031457_c28b2b997569.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261101_031457_c28b2b997569.json"] |
+| report_persistence | PASS | ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261103_112526_cdd3882dddc9.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261103_112526_cdd3882dddc9.json"] |
 | detailed_remediation | PASS | 5 findings include ordered actions, completion criteria and verification |
-| surface_metadata | PASS | {"target_url": "http://127.0.0.1:13547", "methods": {"GET": 8}, "status_codes": {"200": 5, "unmeasured": 1, "422": 1, "403": 1}, "measured_count": 7, "schema_only_count": 1, "auth_response_count": 1, "tech_stack": ["Server: uvicorn"]} |
-| persistent_scan_log | PASS | <프로젝트>\tests\artifacts\독립 실행 한글 경로\logs\scans\20261101_031457_c28b2b997569.jsonl |
+| surface_metadata | PASS | {"target_url": "http://127.0.0.1:5398", "methods": {"GET": 8}, "status_codes": {"200": 5, "unmeasured": 1, "422": 1, "403": 1}, "measured_count": 7, "schema_only_count": 1, "auth_response_count": 1, "tech_stack": ["Server: uvicorn"]} |
+| persistent_scan_log | PASS | <프로젝트>\tests\artifacts\독립 실행 한글 경로\logs\scans\20261103_112526_cdd3882dddc9.jsonl |
 | selected_json_export | PASS | Only selected findings/logs plus provenance |
 | selected_csv_export | PASS | UTF-8 BOM CSV includes enriched endpoint metadata |
 | two_sse_clients | PASS | Independent clients receive identical first event |
@@ -280,14 +307,14 @@ node .\tests\ui_check.cjs
 ### 브라우저 작업 흐름 결과
 
 - 결과: **PASS**
-- 수행 시각: 2026-10-31T18:16:16.435Z
+- 수행 시각: 2026-11-03T02:25:41.096Z
 
 | 검증 항목 | 결과 | 실제 결과 |
 | --- | --- | --- |
 | minimal_copy | PASS | No screen slogan, priority panel, or explanatory count captions |
-| running_motion | PASS | Spinner and scanning line activate on click |
+| running_motion | PASS | Spinner, scanning line and real stages activate; scope is locked |
 | direct_target_scan | PASS | 5 findings, 1 chain, 8 endpoints |
-| completion_motion | PASS | Completion check and line animation use completed state |
+| completion_motion | PASS | Completion check appears and stage labels disappear after completion |
 | charts_reconcile | PASS | Pie slices sum to 5; severity 1/1/1/2/0 and CVSS bins 1/1/2/1 |
 | expanded_finding_table | PASS | Severity, finding/CWE, method/path, CVSS, evidence, remediation summary |
 | finding_filters | PASS | Search empty state and HIGH-only filter |
@@ -305,6 +332,13 @@ node .\tests\ui_check.cjs
 | mobile_save_layout | PASS | Choices and save controls remain visible without page overflow |
 | reload_restores_results | PASS | Counts and charts restore after refresh |
 | reduced_motion | PASS | System motion preference disables scan/check animations |
+| path_scope_network_boundary | PASS | Entry query preserved; every actual target request remains under /app/ |
+| relative_links_and_query_variants | PASS | Nested relative links are measured; query variants remain separate |
+| scoped_finding_request_url | PASS | Detail shows the actual request URL, without duplicated base path or query |
+| scope_mobile_layout | PASS | URL and scope controls fit 390px without document overflow |
+| direct_query_and_reload | PASS | Direct query is diagnosed, unrelated repeated parameters and restored input are preserved |
+| origin_scope_choice | PASS | Same-server choice includes root probes while retaining entry URL |
+| stage_labels_terminal_states | PASS | Stage labels disappear on stopped and failed scans as well as completed scans |
 | offline_assets | PASS | Zero external requests and zero JavaScript exceptions |
 
 ### 디자인 보조 검사
@@ -314,7 +348,7 @@ node .\tests\ui_check.cjs
 - 768px: 페이지 가로 넘침 0px, JavaScript 예외 0개.
 - 390px: 페이지 가로 넘침 0px, JavaScript 예외 0개.
 - WARN `rainbow-chart`: The charts use 5 different hues.
-- WARN `tiny-text`: 74% of the text is under 13px.
+- WARN `tiny-text`: 73% of the text is under 13px.
 - 소스 lint: 0 FAIL, 2 WARN. 숫자·URL의 고정폭 글꼴과 미측정 값의 대시 표시는 데이터 표현에 사용합니다.
 - Impeccable detect: 보조 발견 2건. 진단 중 진행선 모션은 요청된 기능이며 완료 후 멈춥니다.
   - warning: Auto-scrolling marquee

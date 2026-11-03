@@ -25,8 +25,8 @@ class WebAsset(BaseModel):
     tech_stack: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    def find_endpoint(self, path: str, method: str = "GET") -> Optional[HttpEndpoint]:
+    def find_endpoint(self, path: str, method: str = "GET", url: str = None) -> Optional[HttpEndpoint]:
         for ep in self.endpoints:
-            if ep.path == path and ep.method.upper() == method.upper():
+            if ep.path == path and ep.method.upper() == method.upper() and (url is None or ep.url == url):
                 return ep
         return None

@@ -45,7 +45,7 @@ def render_export(payload, format):
             for r in records:
                 details = r.get("remediation_details", {})
                 row = [TITLES[section], meta["scan_id"], meta["target_url"], r.get("id",r.get("chain_id","")),r.get("severity",r.get("cumulative_severity","")),
-                       r.get("title",""),r.get("method",""),r.get("endpoint",r.get("path","")),r.get("status_code",""),r.get("cvss_score",""),r.get("cwe_id",""),
+                       r.get("title",""),r.get("method",""),r.get("request_url") or r.get("url") or r.get("endpoint",r.get("path","")),r.get("status_code",""),r.get("cvss_score",""),r.get("cwe_id",""),
                        r.get("evidence",""),details.get("summary",""),ordered_action_text(details,r.get("remediation","")),r.get("parameters",""),r.get("content_type",""),
                        r.get("response_time_ms",""),r.get("response_bytes",""),r.get("sources",r.get("source","")),r.get("timestamp",r.get("checked_at","")),r.get("data",""),r]
                 writer.writerow([safe_cell(v) for v in row])

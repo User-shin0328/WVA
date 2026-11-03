@@ -9,7 +9,6 @@ from pathlib import Path
 import uuid
 import re
 from typing import Literal
-from urllib.parse import urlsplit
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +20,7 @@ from reporting.report_generator import SecurityReportGenerator
 from dashboard.testbed import LocalTestbed
 from reporting.remediation import finding_details
 from reporting.selected_export import render_export
+from core.safety.target import normalize_target_url
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -30,23 +30,12 @@ def now():
 class ScanRequest(BaseModel):
     target_url: str = "http://127.0.0.1:8989"
     demo: bool = False
+    scope_mode: Literal["path", "origin"] = "path"
 
     @field_validator("target_url")
     @classmethod
     def validate_target(cls, value):
-        value = value.strip()
-        p = urlsplit(value)
-        try:
-            port = p.port
-        except ValueError as exc:
-            raise ValueError("포트 번호를 확인하세요.") from exc
-        if (p.scheme not in ("http", "https") or not p.hostname or p.username or p.password
-                or p.query or p.fragment or p.path not in ("", "/")
-                or any(c.isspace() for c in value) or "\\" in value):
-            raise ValueError("http:// 또는 https://로 시작하는 서버 주소를 입력하세요. 경로·계정·쿼리는 제외하세요.")
-        if port == 0:
-            raise ValueError("1~65535 사이의 포트를 입력하세요.")
-        return value.rstrip("/")
+        return normalize_target_url(value)
 
 class DashboardState:
     def __init__(self):
@@ -66,6 +55,7 @@ class DashboardState:
         self.log_path = ""
         self.log_error = ""
         self.phase = 0
+        self.scope_mode = "path"
 
 state = DashboardState()
 
@@ -87,7 +77,7 @@ def event_callback(event_type, data):
         except OSError as exc:
             state.log_error = "진단 로그 파일 기록 실패: " + str(exc)
 
-async def run_scan_worker(target_url, is_demo):
+async def run_scan_worker(target_url, is_demo, scope_mode="path"):
     terminal_status = "completed"
     try:
         if is_demo:
@@ -95,7 +85,7 @@ async def run_scan_worker(target_url, is_demo):
             target_url = await state.testbed.start()
             state.target_url = target_url
             event_callback("log", "로컬 취약 실습 환경이 준비되었습니다.")
-        engine = VulnerabilityAnalysisEngine(target_url, event_callback=event_callback)
+        engine = VulnerabilityAnalysisEngine(target_url, event_callback=event_callback, scope_mode=scope_mode)
         state.blackboard = engine.blackboard
         await asyncio.wait_for(engine.execute_audit(), timeout=180)
         reporter = SecurityReportGenerator(state.blackboard)
@@ -162,7 +152,7 @@ async def index():
 
 @app.get("/api/health")
 async def health():
-    return {"product": "WVA", "version": "2.1.0", "status": "ok"}
+    return {"product": "WVA", "version": "2.2.0", "status": "ok"}
 
 @app.post("/api/scan/start")
 async def start_scan(req: ScanRequest):
@@ -183,10 +173,11 @@ async def start_scan(req: ScanRequest):
     state.log_path, state.log_error, state.phase = str(log_path), "", 0
     state.started_at, state.finished_at = now(), None
     state.demo, state.report_paths = req.demo, []
+    state.scope_mode = req.scope_mode
     state.target_url = req.target_url if not req.demo else "로컬 실습 환경 준비 중"
     event_callback("status", {"status": "running", "target_url": state.target_url})
-    state.scan_task = asyncio.create_task(run_scan_worker(req.target_url, req.demo))
-    return {"status": "started", "target_url": state.target_url, "demo": req.demo, "scan_id": state.scan_id}
+    state.scan_task = asyncio.create_task(run_scan_worker(req.target_url, req.demo, req.scope_mode))
+    return {"status": "started", "target_url": state.target_url, "demo": req.demo, "scan_id": state.scan_id, "scope_mode": req.scope_mode}
 
 @app.post("/api/scan/stop")
 async def stop_scan():
@@ -230,7 +221,7 @@ async def get_status():
             "severity": severity, "error": state.last_error, "scan_id": state.scan_id,
             "started_at": state.started_at, "finished_at": state.finished_at,
             "demo": state.demo, "report_paths": state.report_paths,
-            "phase": state.phase, "log_path": state.log_path, "log_error": state.log_error,
+            "phase": state.phase, "scope_mode": state.scope_mode, "log_path": state.log_path, "log_error": state.log_error,
             "app_log_path": str(data_root() / "logs" / "WVA.log")}
 
 @app.get("/api/scan/graph")
@@ -287,7 +278,7 @@ async def selected_export(req: ExportRequest):
         raise HTTPException(409, "진단이 변경되었습니다. 현재 결과를 확인하고 다시 저장하세요.")
     payload = {"metadata": {"scan_id": state.scan_id, "target_url": state.target_url,
                             "started_at": state.started_at, "finished_at": state.finished_at,
-                            "status": state.status, "demo": state.demo, "exported_at": now()}}
+                            "status": state.status, "demo": state.demo, "scope_mode": state.scope_mode, "scope_path": state.blackboard.asset.metadata.get("scope_path", "/"), "exported_at": now()}}
     for section in req.sections:
         if section == "summary":
             status = await get_status()

@@ -28,7 +28,7 @@ def test_outside_origin_blocked(url):
 def test_destructive_paths_blocked(path):
     assert not SafetyGovernance("http://localhost").is_safe_endpoint(path)
 
-@pytest.mark.parametrize("url", ["example.com", "ftp://example.com", "https://a:b@example.com", "http://localhost:99999", "http://localhost:0", "http://localhost/path", "http://localhost?x=1", "http://local host"])
+@pytest.mark.parametrize("url", ["example.com", "ftp://example.com", "https://a:b@example.com", "http://localhost:99999", "http://localhost:0", "http://localhost/#section", "http://localhost/%0Aprivate", "http://local host"])
 def test_invalid_target_rejected(url):
     with pytest.raises(ValidationError):
         ScanRequest(target_url=url)

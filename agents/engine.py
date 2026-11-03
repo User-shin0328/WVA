@@ -12,10 +12,11 @@ class VulnerabilityAnalysisEngine:
     Main Orchestrator for the Web Vulnerability & Attack Path Chaining Agent.
     Drives the pipeline: Surface Recon -> Specialized Auditors -> Chaining Planner -> Threat Graph.
     """
-    def __init__(self, target_url: str, event_callback: Optional[Callable[[str, Any], None]] = None):
-        self.target_url = target_url.rstrip("/")
-        self.governance = SafetyGovernance(self.target_url)
+    def __init__(self, target_url: str, event_callback: Optional[Callable[[str, Any], None]] = None, scope_mode: str = "path"):
+        self.governance = SafetyGovernance(target_url, scope_mode=scope_mode)
+        self.target_url = self.governance.target_base_url
         self.blackboard = SecurityBlackboard(self.target_url, event_callback=event_callback)
+        self.blackboard.asset.metadata.update(scope_mode=scope_mode, scope_path=self.governance.scope_path or "/")
 
     async def execute_audit(self) -> SecurityBlackboard:
         self.blackboard.log(f"=== Starting Security Assessment against: {self.target_url} ===")
