@@ -71,7 +71,7 @@ class SurfaceReconEngine:
                     self.blackboard.add_endpoint(ep)
                     discovered.append(ep)
 
-                    # Passive HTML parsing for additional links and forms
+                    # Passive HTML parsing for additional links, forms and scripts
                     if "text/html" in resp.headers.get("content-type", ""):
                         self._parse_html_links_and_forms(resp.text, target_url)
                         for item in self.blackboard.asset.endpoints:
@@ -134,6 +134,21 @@ class SurfaceReconEngine:
                     path=path,
                     parameters=list(parse_qs(urlparse(full_url).query)),
                     source="link_parser"
+                )
+                self.blackboard.add_endpoint(ep)
+
+        # Parse client-side scripts for bundle secret scanning
+        for s in soup.find_all("script", src=True):
+            src = s["src"]
+            full_url = urljoin(base_url, src).split("#", 1)[0]
+            path = urlparse(full_url).path
+            if self.governance.is_in_scope(full_url) and self.governance.is_safe_endpoint(path):
+                ep = HttpEndpoint(
+                    url=full_url,
+                    method="GET",
+                    path=path,
+                    parameters=[],
+                    source="script_parser"
                 )
                 self.blackboard.add_endpoint(ep)
 

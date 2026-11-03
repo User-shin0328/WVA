@@ -75,6 +75,39 @@ ACTION_PLANS = {
         ("재검증", "Set-Cookie와 로그인·갱신·로그아웃·외부 인증 동작을 확인합니다.", "보안 속성이 유지되고 정상 인증 흐름이 성공합니다.")],
 }
 
+def build_ai_prompt(data: dict) -> str:
+    title = data.get("title", "")
+    vuln_type = data.get("vuln_type", "")
+    severity = data.get("severity", "")
+    cvss = data.get("cvss_score", 3.0)
+    cwe = data.get("cwe_id", "-")
+    method = data.get("method", "GET")
+    endpoint = data.get("request_url") or data.get("endpoint", "")
+    desc = data.get("description", "")
+    evidence = data.get("evidence", "")
+    rem = data.get("remediation_details", {}) or {}
+    summary = rem.get("summary", data.get("remediation", ""))
+    actions = "\n".join(f"- {a}" for a in rem.get("actions", [summary]))
+    checks = "\n".join(f"- {c}" for c in rem.get("verification", []))
+
+    return (
+        f"[취약점 조치 요청: {title}]\n\n"
+        f"■ 취약점 정보\n"
+        f"- 항목명: {title} ({vuln_type})\n"
+        f"- 위험도: {severity} (CVSS: {cvss})\n"
+        f"- CWE: {cwe}\n"
+        f"- 대상 엔드포인트: {method} {endpoint}\n"
+        f"- 발견 증거: {evidence}\n"
+        f"- 영향 및 설명: {desc}\n\n"
+        f"■ 권고 조치 순서\n"
+        f"{actions}\n\n"
+        f"■ 수정 후 확인 기준\n"
+        f"{checks}\n\n"
+        f"■ AI 요청 사항\n"
+        f"위 취약점을 해결하기 위해 웹 애플리케이션 또는 서버 설정 코드의 구체적인 수정 패치를 작성해줘. "
+        f"어느 파일의 어떤 부분을 어떻게 수정해야 하는지 단계별로 명확하게 설명해줘."
+    )
+
 def finding_details(finding):
     data = finding.model_dump(mode="json") if hasattr(finding, "model_dump") else dict(finding)
     rule = RULES.get(data["vuln_type"], {
@@ -97,5 +130,7 @@ def finding_details(finding):
         details["verification"] = ["강제 Content-Security-Policy 헤더가 관찰 경로와 오류 응답에 적용됐는지 확인합니다.", "정상 기능을 유지하며 허용하지 않은 출처의 로드가 제한되는지 확인합니다."]
     elif key == "HSTS":
         details["verification"] = ["HTTPS 응답의 Strict-Transport-Security 값과 적용 범위를 확인합니다.", "유효한 인증서와 정상 기능이 유지되는지 확인합니다."]
+    details["ai_prompt"] = build_ai_prompt({**data, "remediation_details": details})
     data["remediation_details"] = details
+    data["ai_prompt"] = details["ai_prompt"]
     return data

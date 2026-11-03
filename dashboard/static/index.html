@@ -23,7 +23,7 @@
     <div class="title-row"><h1 id="page-title">웹 대상 진단</h1><button class="button secondary" id="go-save">정보 저장 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button></div>
     <section id="target-section" class="target-section" aria-label="진단 대상 설정">
       <form id="scan-form"><label for="target">진단할 URL</label><div class="target-row"><div class="target-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18"/></svg><input id="target" name="target" type="url" placeholder="http://127.0.0.1:8990/?page=1" autocomplete="url" spellcheck="false" required></div><button class="button primary" type="submit" id="start">진단 시작</button><button class="button secondary" type="button" id="stop" hidden>진단 중단</button></div></form>
-      <div class="target-tools"><label class="scope-choice" for="scope-mode">진단 범위<select id="scope-mode"><option value="path">입력 경로와 하위 경로</option><option value="origin">같은 서버 전체</option></select></label><button class="text-button" id="demo">로컬 데모 실행</button></div>
+      <div class="target-tools"><label class="scope-choice" for="scope-mode">진단 범위<select id="scope-mode"><option value="path">입력 경로와 하위 경로</option><option value="origin">같은 서버 전체</option></select></label><label class="consent-choice" for="scan-consent"><input type="checkbox" id="scan-consent" checked><span>점검 권한 확인 (정보통신망법 준수)</span></label><button class="text-button" id="demo">로컬 데모 실행</button></div>
     </section>
     <div id="error" role="alert" class="error-message" hidden></div>
     <section id="scan-state" class="scan-state" data-state="idle" aria-label="진단 상태">
@@ -31,11 +31,20 @@
       <ol id="scan-phases" class="scan-phases" aria-label="현재 진단 진행 단계" hidden></ol><div class="scan-track" aria-hidden="true"><span></span></div>
     </section>
     <section id="metrics" class="metrics" aria-label="결과 요약">
+      <div class="metric"><span>종합 보안 등급</span><div><strong id="security-grade">—</strong><span class="unit" id="security-score">100점</span></div></div>
       <div class="metric"><span>발견 항목</span><div><strong id="count-findings">0</strong><span class="unit">건</span></div></div>
       <div class="metric"><span>연계 경로</span><div><strong id="count-chains">0</strong><span class="unit">건</span></div></div>
       <div class="metric"><span>확인된 엔드포인트</span><div><strong id="count-endpoints">0</strong><span class="unit">개</span></div></div>
     </section>
     <section id="overview-view" class="view">
+      <div id="diff-banner" class="panel diff-banner" hidden>
+        <div class="diff-header"><span class="diff-title">재진단 전후 비교</span><span id="diff-summary-text" class="diff-text mono">—</span></div>
+        <div id="diff-chips" class="diff-chips">
+          <span class="diff-chip fixed" id="diff-chip-fixed">조치 완료 0건</span>
+          <span class="diff-chip new" id="diff-chip-new">신규 발생 0건</span>
+          <span class="diff-chip persistent" id="diff-chip-persistent">유지 0건</span>
+        </div>
+      </div>
       <section id="risk-charts" class="chart-grid" aria-label="발견 항목 분포" hidden>
         <div class="panel chart-panel"><div class="panel-heading"><h2>위험도별 발견 항목</h2><span class="muted">건</span></div><div id="severity-chart" class="chart-host"></div></div>
         <div class="panel chart-panel"><div class="panel-heading"><h2>CVSS 점수 분포</h2><span class="muted">건</span></div><div id="cvss-chart" class="chart-host"></div></div>
