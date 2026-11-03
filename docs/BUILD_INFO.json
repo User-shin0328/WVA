@@ -1,16 +1,19 @@
 {
   "product": "WVA",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "date": "2026-11-03",
   "platform": "Windows x64",
   "file": "WVA.exe",
-  "bytes": 26149022,
-  "sha256": "886795198250bc9c288671096a8127feb407b718fd83cfae0f2b9df6251faef2",
-  "functional_checks": 84,
-  "executable_checks": 21,
-  "browser_checks": 32,
+  "bytes": 26160304,
+  "sha256": "5ceba009a5bac69ef3bc0df41e6e999b29fde46d02e9c436fed5269b6b926279",
+  "functional_checks": 99,
+  "executable_checks": 25,
+  "browser_checks": 36,
   "test_guide": "tests/TEST_GUIDE.md",
   "default_port": 9030,
   "csv_columns": 25,
-  "proposed_rules": "docs/RULE_DESIGN.md"
+  "proposed_rules": "docs/RULE_DESIGN.md",
+  "upstream_commit": "428d272cb44230be882bea4e7b63bdeb27866373",
+  "local_checkpoint": "05c0226",
+  "integration_report": "docs/INTEGRATION_REPORT.md"
 }

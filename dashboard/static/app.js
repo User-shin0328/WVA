@@ -2,17 +2,17 @@
 const $ = id => document.getElementById(id);
 const severityNames = {CRITICAL:'심각',HIGH:'높음',MEDIUM:'중간',LOW:'낮음',INFO:'정보'};
 const severityRank = {CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
-const typeNames = {MISSING_SECURITY_HEADER:'보안 헤더 누락',EXPOSED_DEBUG_ENDPOINT:'디버그 정보 노출',INFO_DISCLOSURE:'민감 정보 노출',BOLA_IDOR:'객체 접근 통제 누락',PRIVILEGE_ESCALATION:'유출 키로 관리자 응답 접근',CORS_MISCONFIGURATION:'외부 출처 접근 허용',COOKIE_SECURITY_FLAG:'쿠키 보안 속성 누락',AUTH_BYPASS:'인증 우회',PARAMETER_REFLECTION:'입력값 반사'};
+const typeNames = {MISSING_SECURITY_HEADER:'보안 헤더 누락',EXPOSED_DEBUG_ENDPOINT:'디버그 정보 노출',INFO_DISCLOSURE:'민감 정보 노출',BOLA_IDOR:'객체 접근 통제 누락',PRIVILEGE_ESCALATION:'유출 키로 관리자 응답 접근',CORS_MISCONFIGURATION:'외부 출처 접근 허용',COOKIE_SECURITY_FLAG:'쿠키 보안 속성 누락',AUTH_BYPASS:'인증 우회',PARAMETER_REFLECTION:'입력값 반사',SECRET_LEAK:'클라이언트 스크립트 시크릿 노출',TLS_EXPIRING:'SSL/TLS 인증서 만료 임박'};
 const statusNames = {idle:'진단 대기',running:'진단 중',completed:'진단 완료',stopped:'진단 중단 · 부분 결과',error:'진단 실패'};
 const views = {overview:'웹 대상 진단',chains:'취약점 연계 경로',endpoints:'공격 표면',logs:'진단 로그',save:'정보 저장'};
 const exportNames = {summary:'진단 요약',findings:'발견 항목',chains:'연계 경로',endpoints:'공격 표면',logs:'진단 로그'};
 const phases = ['연결','표면 탐색','설정 점검','접근 제어','경로 분석'];
-const sources = {surface_discovery:'경로 탐색',link_parser:'HTML 링크',form_parser:'HTML 폼',openapi:'API 문서'};
-let snapshot=null,findings=[],chains=[],endpoints=[],logs=[],surface={},selected=null;
+const sources = {surface_discovery:'경로 탐색',link_parser:'HTML 링크',form_parser:'HTML 폼',openapi:'API 문서',script_parser:'스크립트'};
+let snapshot=null,findings=[],chains=[],endpoints=[],logs=[],surface={},diffData=null,selected=null;
 let renderKey='',refreshing=false,starting=false,stopping=false,shuttingDown=false,exporting=false,activeView='overview';
 
 function el(tag,className,text){const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;}
-function label(f){if(f.id.startsWith('VULN-CSP'))return '콘텐츠 보안 정책(CSP) 누락';if(f.id.startsWith('VULN-HSTS'))return 'HTTPS 강제 정책(HSTS) 누락';return typeNames[f.vuln_type]||f.title;}
+function label(f){if(f.id.startsWith('VULN-CSP'))return '콘텐츠 보안 정책(CSP) 누락';if(f.id.startsWith('VULN-HSTS'))return 'HTTPS 강제 정책(HSTS) 누락';if(f.id.startsWith('VULN-SECRET-LEAK'))return '클라이언트 스크립트 API 키/시크릿 노출';if(f.id.startsWith('VULN-TLS-EXPIRING'))return 'SSL/TLS 인증서 만료 임박';return typeNames[f.vuln_type]||f.title;}
 function error(message){$('error').textContent=message||'';$('error').hidden=!message;}
 async function responseError(response){let msg='요청을 처리하지 못했습니다.';try{const body=await response.json();msg=Array.isArray(body.detail)?body.detail.map(x=>x.msg.replace(/^Value error, /,'')).join(' '):body.detail||msg;}catch(_){}return new Error(msg);}
 async function api(path,options){const response=await fetch(path,options);if(!response.ok)throw await responseError(response);return response.json();}
@@ -34,6 +34,20 @@ function renderStatus(){
   if($('scan-state').dataset.state!==displayState)$('scan-state').dataset.state=displayState;
   $('status').textContent=running?'진단 중':statusNames[s.status]||s.status;$('scope').textContent=s.target_url?(s.demo?'로컬 데모 · ':'')+s.target_url:'—';$('elapsed').textContent=duration();
   $('count-findings').textContent=s.findings_count.toLocaleString();$('count-chains').textContent=s.chains_count.toLocaleString();$('count-endpoints').textContent=s.endpoints_count.toLocaleString();
+  const gradeEl=$('security-grade');
+  if(gradeEl){
+    if(s.status==='completed'){
+      const grade=s.grade||'—';gradeEl.textContent=grade;
+      if(grade==='A'||grade==='B')gradeEl.style.color='var(--accent)';
+      else if(grade==='C')gradeEl.style.color='#ffd43b';
+      else if(grade==='D'||grade==='F')gradeEl.style.color='var(--danger)';
+      else gradeEl.style.color='';
+    }else{
+      gradeEl.textContent='—';gradeEl.style.color='';
+    }
+  }
+  const scoreEl=$('security-score');
+  if(scoreEl)scoreEl.textContent=s.status==='completed'&&Number.isFinite(s.score)?(s.score+'점'):'—';
   $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('scope-mode').disabled=running;$('demo').disabled=running;$('stop').hidden=!running;$('stop').disabled=starting||stopping;
   $('scan-phases').hidden=!running;
   const phase=starting?0:(s.phase||0);$('scan-phases').replaceChildren(...phases.map((name,index)=>{const item=el('li',index<phase?'done':index===phase&&running?'current':'',name);if(index===phase&&running)item.setAttribute('aria-current','step');return item;}));
@@ -73,7 +87,11 @@ function renderCharts(){
 function createFindingRow(f){
   const row=el('tr','finding-row');row.addEventListener('click',()=>openFinding(f.id));
   const severity=el('td');severity.append(el('span','severity '+f.severity,severityNames[f.severity]));
-  const main=el('td');const button=el('button','finding-name',label(f));button.type='button';button.setAttribute('aria-haspopup','dialog');button.title=f.title;main.append(button,el('span','subline',f.cwe_id||'—'));
+  const main=el('td');const button=el('button','finding-name',label(f));button.type='button';button.setAttribute('aria-haspopup','dialog');button.title=f.title;
+  if(diffData?.new_ids?.includes(f.id)){
+    button.append(el('span','badge-new','신규'));
+  }
+  main.append(button,el('span','subline',f.cwe_id||'—'));
   const route=el('td');route.append(el('span','endpoint',f.endpoint),el('span','subline',f.method));
   const evidence=el('td');evidence.append(el('span','cell-summary',f.evidence));const action=el('td');action.append(el('span','cell-summary',f.remediation_details?.summary||f.remediation));
   row.append(severity,main,route,el('td','numeric score',Number.isFinite(f.cvss_score)?f.cvss_score.toFixed(1):'—'),evidence,action);return row;
@@ -108,7 +126,10 @@ function openFinding(id){
   const verify=detailBlock('수정 후 확인');const checks=el('ul');for(const check of f.remediation_details?.verification||[])checks.append(el('li','',check));verify.append(checks);
   const original=el('details','detail-original');original.append(el('summary','','기술 정보 및 원문'),el('p','mono',f.id),el('p','mono','CWE: '+(f.cwe_id||'—')+' · '+f.method),el('p','',f.description),el('p','',f.remediation));
   for(const reference of risk.references){const p=el('p');const link=el('a','',reference.title);link.href=reference.url;link.target='_blank';link.rel='noopener noreferrer';p.append(link);original.append(p);}
-  $('detail-content').replaceChildren(overview,metrics,observed,attacks,limits,remediation,verify,original);
+  const contentItems=[overview,metrics,observed,attacks,limits,remediation,verify];
+  const aiPrompt=f.ai_prompt||f.remediation_details?.ai_prompt;
+  if(aiPrompt){const ai=el('details','detail-ai');ai.append(el('summary','','AI 수정 프롬프트'),el('pre','',aiPrompt));const copy=el('button','button secondary','프롬프트 복사');copy.type='button';copy.id='copy-ai-prompt';copy.addEventListener('click',async()=>{try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(aiPrompt);else{const input=el('textarea');input.value=aiPrompt;document.body.append(input);input.select();const copied=document.execCommand('copy');input.remove();if(!copied)throw new Error('copy failed');}copy.textContent='복사 완료';}catch(_){copy.textContent='복사 실패 · 내용을 직접 선택하세요.';}});ai.append(copy);contentItems.push(ai);}
+  contentItems.push(original);$('detail-content').replaceChildren(...contentItems);
   if(!$('finding-dialog').open)$('finding-dialog').showModal();
   $('detail-content').scrollTop=0;requestAnimationFrame(()=>{$('detail-content').scrollTop=0;});
 }
@@ -145,22 +166,60 @@ function updateExport(){
   if(!chosen.length)$('save-result').textContent='저장할 정보를 선택하세요.';else if(snapshot?.status!=='completed')$('save-result').textContent='진단 완료 후 저장 가능';else if($('save-result').textContent==='진단 완료 후 저장 가능'||$('save-result').textContent==='저장할 정보를 선택하세요.')$('save-result').textContent='';
 }
 function renderAll(){renderFindings();renderCharts();renderChains();renderEndpoints();renderLogs();updateExport();}
+async function updateDiff(){
+  if(snapshot?.status==='completed'){
+    try{
+      diffData=await api('/api/scan/diff');
+      const banner=$('diff-banner');
+      if(banner){
+        if(diffData?.has_previous){
+          banner.hidden=false;
+          const sign=diffData.score_diff>0?'+':'';
+          $('diff-summary-text').textContent=`${sign}${diffData.score_diff}점 변동 (이전 ${diffData.previous_score}점/${diffData.previous_grade} → 현재 ${diffData.current_score}점/${diffData.current_grade})`;
+          $('diff-chip-fixed').textContent=`이번에 미발견 ${diffData.fixed_count}건`;
+          $('diff-chip-new').textContent=`신규 발생 ${diffData.new_count}건`;
+          $('diff-chip-persistent').textContent=`유지 ${diffData.persistent_count}건`;
+        }else{
+          banner.hidden=true;
+        }
+      }
+    }catch(_){if($('diff-banner'))$('diff-banner').hidden=true;}
+  }else{
+    diffData=null;if($('diff-banner'))$('diff-banner').hidden=true;
+  }
+}
 async function refresh(force=false){
   if(refreshing||shuttingDown)return;refreshing=true;
   try{
     const s=await api('/api/scan/status');if(!snapshot&&s.scan_id){$('scope-mode').value=s.scope_mode||'path';if(!s.demo)$('target').value=s.target_url;}const key=[s.scan_id,s.status,s.findings_count,s.chains_count,s.endpoints_count].join('|');const changed=force||key!==renderKey;snapshot=s;renderStatus();
     if(changed||s.status==='running'){
       const data=await Promise.all(['/api/scan/findings','/api/scan/chains','/api/scan/endpoints','/api/scan/logs','/api/scan/surface'].map(p=>api(p)));
-      [findings,chains,endpoints,logs,surface]=data;findings.sort((a,b)=>severityRank[a.severity]-severityRank[b.severity]);renderKey=key;renderAll();
+      [findings,chains,endpoints,logs,surface]=data;findings.sort((a,b)=>severityRank[a.severity]-severityRank[b.severity]);
+      if(s.status==='completed'){
+        await updateDiff();
+      }else{
+        diffData=null;
+        if($('diff-banner'))$('diff-banner').hidden=true;
+      }
+      renderKey=key;renderAll();
     }
   }catch(exc){error('서버 연결 실패: '+exc.message);}finally{refreshing=false;}
 }
 async function start(demo=false){
-  if(starting||snapshot?.status==='running')return;starting=true;error('');if($('finding-dialog').open)$('finding-dialog').close();
+  if(starting||snapshot?.status==='running')return;
+  if(!demo&&$('scan-consent')&&!$('scan-consent').checked){
+    error('점검 권한 확인에 동의해야 시작할 수 있습니다.');
+    return;
+  }
+  starting=true;error('');if($('finding-dialog').open)$('finding-dialog').close();
   $('start').disabled=true;$('demo').disabled=true;$('scope-mode').disabled=true;$('scan-state').dataset.state='running';$('status').textContent='진단 중';if(snapshot)renderStatus();
   try{
-    const target=demo?'http://127.0.0.1:8989':$('target').value.trim();const scopeMode=demo?'path':$('scope-mode').value;const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode});
-    selected=null;findings=[];chains=[];endpoints=[];logs=[];surface={};renderKey='';$('save-result').textContent='진단 완료 후 저장 가능';
+    const target=demo?'http://127.0.0.1:8989':$('target').value.trim();
+    const scopeMode=demo?'path':$('scope-mode').value;
+    const consent=demo?true:Boolean($('scan-consent')?.checked);
+    const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode,consent});
+    selected=null;findings=[];chains=[];endpoints=[];logs=[];surface={};diffData=null;renderKey='';$('save-result').textContent='진단 완료 후 저장 가능';
+    if($('diff-banner'))$('diff-banner').hidden=true;
     snapshot={...snapshot,status:'running',scan_id:result.scan_id,target_url:result.target_url,scope_mode:result.scope_mode,demo,findings_count:0,chains_count:0,endpoints_count:0,phase:0,started_at:new Date().toISOString(),finished_at:null,error:'',log_path:''};renderStatus();renderAll();await refresh(true);
   }catch(exc){error(exc.message);}finally{starting=false;if(snapshot)renderStatus();else{$('start').disabled=false;$('demo').disabled=false;$('scope-mode').disabled=false;$('scan-phases').hidden=true;$('scan-state').dataset.state='idle';$('status').textContent='진단 대기';}}
 }

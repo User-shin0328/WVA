@@ -23,14 +23,61 @@ from reporting.selected_export import render_export
 from core.safety.target import normalize_target_url
 
 STATIC_DIR = Path(__file__).parent / "static"
+VERSION = "2.4.0"
 
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+def compute_score_and_grade(findings):
+    def get_sev(f):
+        if isinstance(f, dict):
+            s = f.get("severity", "")
+            return getattr(s, "value", s) if s else ""
+        return getattr(f.severity, "value", str(f.severity))
+
+    crit = sum(1 for f in findings if get_sev(f) == "CRITICAL")
+    high = sum(1 for f in findings if get_sev(f) == "HIGH")
+    med = sum(1 for f in findings if get_sev(f) == "MEDIUM")
+    low = sum(1 for f in findings if get_sev(f) == "LOW")
+
+    penalty = min(50, crit * 25) + min(30, high * 15) + min(20, med * 8) + min(10, low * 3)
+    score = max(0, 100 - penalty)
+    if score >= 90:
+        grade = "A"
+    elif score >= 80:
+        grade = "B"
+    elif score >= 70:
+        grade = "C"
+    elif score >= 60:
+        grade = "D"
+    else:
+        grade = "F"
+    return score, grade
+
+def get_previous_scan_report(target_url: str, current_scan_id: str, profile=None):
+    if not profile:
+        return None
+    report_dir = data_root() / "reports"
+    if not report_dir.exists():
+        return None
+    files = sorted(report_dir.glob("*.json"), key=os.path.getmtime, reverse=True)
+    for p in files:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            stem_id = p.stem.split("_")[-1] if "_" in p.stem else ""
+            meta = data.get("scan_metadata", {})
+            if (data.get("schema") == "wva-report-2" and data.get("target_url") == target_url and stem_id != current_scan_id
+                    and meta.get("completed") is True and meta.get("scan_id") != current_scan_id and meta.get("profile") == profile):
+                return data
+        except Exception:
+            continue
+    return None
 
 class ScanRequest(BaseModel):
     target_url: str = "http://127.0.0.1:8989"
     demo: bool = False
     scope_mode: Literal["path", "origin"] = "path"
+    consent: bool = True
 
     @field_validator("target_url")
     @classmethod
@@ -88,6 +135,9 @@ async def run_scan_worker(target_url, is_demo, scope_mode="path"):
         engine = VulnerabilityAnalysisEngine(target_url, event_callback=event_callback, scope_mode=scope_mode)
         state.blackboard = engine.blackboard
         await asyncio.wait_for(engine.execute_audit(), timeout=180)
+        state.blackboard.asset.metadata["report_metadata"] = {
+            "scan_id": state.scan_id, "completed": True,
+            "profile": {"scope_mode": state.scope_mode, "scope_path": engine.governance.scope_path or "/", "ruleset": VERSION}}
         reporter = SecurityReportGenerator(state.blackboard)
         report_dir = data_root() / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -152,12 +202,14 @@ async def index():
 
 @app.get("/api/health")
 async def health():
-    return {"product": "WVA", "version": "2.3.0", "status": "ok"}
+    return {"product": "WVA", "version": VERSION, "status": "ok"}
 
 @app.post("/api/scan/start")
 async def start_scan(req: ScanRequest):
     if state.status == "running":
         raise HTTPException(409, "진단이 진행 중입니다. 완료하거나 중단한 뒤 다시 시작하세요.")
+    if not req.consent and not req.demo:
+        raise HTTPException(400, "진단 권한 확인에 동의해야 시작할 수 있습니다.")
     scan_id = uuid.uuid4().hex[:12]
     log_path = data_root() / "logs" / "scans" / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + scan_id + ".jsonl")
     try:
@@ -215,14 +267,53 @@ async def get_status():
     severity = dict.fromkeys(("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"), 0)
     for f in findings:
         severity[f.severity.value] += 1
+    score, grade = compute_score_and_grade(findings) if state.status == "completed" else (None, None)
     return {"status": state.status, "target_url": state.target_url,
             "endpoints_count": len(bb.asset.endpoints) if bb else 0,
             "findings_count": len(findings), "chains_count": len(bb.chains) if bb else 0,
-            "severity": severity, "error": state.last_error, "scan_id": state.scan_id,
+            "severity": severity, "score": score, "grade": grade, "error": state.last_error, "scan_id": state.scan_id,
             "started_at": state.started_at, "finished_at": state.finished_at,
             "demo": state.demo, "report_paths": state.report_paths,
             "phase": state.phase, "scope_mode": state.scope_mode, "log_path": state.log_path, "log_error": state.log_error,
             "app_log_path": str(data_root() / "logs" / "WVA.log")}
+
+@app.get("/api/scan/diff")
+async def get_diff():
+    if state.status != "completed" or not state.blackboard:
+        return {"has_previous": False, "comparison_status": "not_completed"}
+    curr_findings = [finding_details(f) for f in state.blackboard.get_findings_list()]
+    curr_score, curr_grade = compute_score_and_grade(curr_findings)
+    profile = state.blackboard.asset.metadata.get("report_metadata", {}).get("profile")
+    prev = get_previous_scan_report(state.target_url, state.scan_id, profile)
+    if not prev or not isinstance(prev.get("findings"), list):
+        return {
+            "has_previous": False,
+            "comparison_status": "no_compatible_baseline",
+            "current_score": curr_score,
+            "current_grade": curr_grade
+        }
+    prev_findings = prev.get("findings", [])
+    prev_score, prev_grade = compute_score_and_grade(prev_findings)
+    prev_ids = {f["id"]: f for f in prev_findings if isinstance(f, dict) and "id" in f}
+    curr_ids = {f["id"]: f for f in curr_findings if isinstance(f, dict) and "id" in f}
+
+    fixed_ids = set(prev_ids.keys()) - set(curr_ids.keys())
+    new_ids = set(curr_ids.keys()) - set(prev_ids.keys())
+    persistent_ids = set(curr_ids.keys()) & set(prev_ids.keys())
+
+    return {
+        "has_previous": True,
+        "previous_score": prev_score,
+        "previous_grade": prev_grade,
+        "current_score": curr_score,
+        "current_grade": curr_grade,
+        "score_diff": curr_score - prev_score,
+        "fixed_count": len(fixed_ids),
+        "new_count": len(new_ids),
+        "persistent_count": len(persistent_ids),
+        "fixed_findings": [prev_ids[i] for i in sorted(fixed_ids)],
+        "new_ids": sorted(list(new_ids))
+    }
 
 @app.get("/api/scan/graph")
 async def get_graph():
@@ -282,7 +373,7 @@ async def selected_export(req: ExportRequest):
     for section in req.sections:
         if section == "summary":
             status = await get_status()
-            payload[section] = {k: status[k] for k in ("findings_count", "chains_count", "endpoints_count", "severity")}
+            payload[section] = {k: status[k] for k in ("findings_count", "chains_count", "endpoints_count", "severity", "score", "grade")}
         elif section == "findings":
             payload[section] = await get_findings()
         elif section == "chains":

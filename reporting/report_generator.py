@@ -98,6 +98,7 @@ class SecurityReportGenerator:
             "assessment_scope": "Heuristic read-only checks; inferred attack paths; not SARIF or a complete penetration test.",
             "target_url": bb.target_url,
             "scan_scope": bb.asset.metadata,
+            "scan_metadata": bb.asset.metadata.get("report_metadata", {}),
             "endpoints": [ep.model_dump() for ep in bb.asset.endpoints],
             "findings": [finding_details(f) for f in bb.get_findings_list()],
             "exploit_chains": [c.model_dump() for c in bb.chains],
