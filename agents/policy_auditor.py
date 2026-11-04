@@ -76,14 +76,15 @@ class PolicyAuditor:
                     first=await clients[case.owner].get(case.url)
                     second=await clients[case.owner].get(case.url)
                     expected=protected(first.json(),case.protected_fields) if first.status_code==200 else None
-                    if expected is None or expected!=protected(second.json(),case.protected_fields):raise ValueError('소유자/관리자의 보호 데이터 기준 응답이 없거나 불안정합니다.')
+                    if expected is None or not any(v not in (None, '', [], {}) for v in expected.values()) or second.status_code!=200 or expected!=protected(second.json(),case.protected_fields):raise ValueError('소유자/관리자의 보호 데이터 기준 응답이 없거나 불안정합니다.')
                     for alias in case.denied:
-                        response=await clients[alias].get(case.url)
+                        responses=[await clients[alias].get(case.url) for _ in range(2)]
+                        if any(r.status_code not in (200,401,403,404) for r in responses):raise ValueError('거부 계정 응답의 오류 또는 이동으로 대조를 완료하지 못했습니다.')
                         results[case.kind][0]+=1
-                        exposed=False
-                        if response.status_code==200:
-                            try:exposed=protected(response.json(),case.protected_fields)==expected
-                            except ValueError:pass
+                        exposed=all(r.status_code==200 for r in responses)
+                        if exposed:
+                            try:exposed=all(protected(r.json(),case.protected_fields)==expected for r in responses)
+                            except ValueError:exposed=False
                         if exposed:
                             results[case.kind][1]+=1
                             self.finding(VulnerabilityType.BOLA_IDOR if case.kind=='object' else VulnerabilityType.AUTH_BYPASS,case.url,
@@ -129,6 +130,8 @@ class PolicyAuditor:
             record(self.bb,'R12-S','저장형 XSS 실행 대조','NOT_RUN','브라우저 검사를 먼저 켜세요. 저장 요청을 전송하지 않았습니다.');return
         for case in self.options.stored_cases:
             dirty=False
+            receipt={'kind':'stored','attempted':False,'cleaned':False,'verified':False}
+            self.bb.asset.metadata.setdefault('cleanup_receipts',[]).append(receipt)
             try:
                 urls=[case.write_url,case.read_url,case.cleanup_url]
                 if not all(loopback(url) and self.gov.is_in_scope(url) for url in urls):raise ValueError('저장형 검사는 범위 안의 명시한 로컬 실습 URL만 사용합니다.')
@@ -142,6 +145,7 @@ class PolicyAuditor:
                         marker=uuid.uuid4().hex;variable='__wva_'+uuid.uuid4().hex[:10]
                         fields={**case.fields,case.field:f'<script>window.{variable}="{marker}"</script>','wva_marker':marker}
                         dirty=True
+                        receipt['attempted']=True
                         result=await post_form(client,case.write_url,fields)
                         if result.status_code>=400:raise ValueError('실습 저장 요청 실패')
                         context=await browser_auditor.context(browser,client)
@@ -160,44 +164,52 @@ class PolicyAuditor:
                     try:
                         cleaned=await post_form(client,case.cleanup_url,{**case.fields,'wva_marker':marker})
                         if cleaned.status_code>=400:raise ValueError('실습 표식 정리 응답 실패')
+                        receipt['cleaned']=True
                         check=await client.get(case.read_url)
+                        if check.status_code not in (200,404):raise ValueError('정리 후 조회 응답을 확인하지 못했습니다.')
                         if marker in check.text:raise ValueError('정리 후에도 저장 표식이 남아 있습니다.')
+                        receipt['verified']=True
                     except Exception as exc:errors.append('정리 확인 실패: '+str(exc)[:100])
         record(self.bb,'R12-S','저장형 XSS 실행 대조','FINDING' if found else 'ERROR' if errors else 'PASS' if tested else 'NOT_RUN',
                '; '.join(errors[:2]) if errors else f'저장·별도 조회·정리 대조 {tested}개, 실행 {found}건.' if tested else '저장·조회·정리 URL을 가진 로컬 시나리오를 지정하지 않았습니다.',tested,found,errors=len(errors))
 
     async def concurrency(self,client):
         mode = getattr(self.options, 'mode', 'safe')
-        if mode != 'deep':
+        if mode != 'deep' or not self.options.concurrency_check:
             record(self.bb,'R15','동시성 및 상태 일관성 대조','NOT_RUN','운영 안전 모드에서는 동시성 부하 검사를 수행하지 않습니다. 샌드박스 모드를 선택하세요.')
             return
+        if not loopback(self.gov.target_base_url):
+            record(self.bb,'R15','동시성 및 상태 일관성 대조','ERROR','명시한 로컬 대상에서만 동시 요청을 대조합니다.',errors=1);return
         candidates = [ep.url for ep in self.bb.asset.endpoints if ep.method=='GET' and ep.parameters and self.gov.is_in_scope(ep.url)]
         if not candidates:
             candidates = [self.gov.target_base_url]
-        tested = found = 0
+        tested = signals = 0
         errors = []
         for url in candidates[:3]:
             try:
+                from core.http.requester import fingerprint
+                baseline=[await client.get(url,timeout=4.0) for _ in range(2)]
+                if any(r.status_code!=200 for r in baseline):raise ValueError('정상 단일 요청 기준 응답이 없습니다.')
+                stable=fingerprint(baseline[0])==fingerprint(baseline[1])
                 responses = await asyncio.gather(*[client.get(url, timeout=4.0) for _ in range(5)], return_exceptions=True)
+                errors.extend(type(r).__name__ for r in responses if isinstance(r,BaseException))
                 valid = [r for r in responses if hasattr(r, 'status_code')]
-                if len(valid) >= 2:
+                errors.extend(f'HTTP {r.status_code}' for r in valid if r.status_code!=200)
+                if len(valid)==5 and all(r.status_code==200 for r in valid):
                     tested += 1
-                    status_codes = {r.status_code for r in valid}
-                    if any(c >= 500 for c in status_codes):
-                        found += 1
-                        self.finding(VulnerabilityType.EXPOSED_DEBUG_ENDPOINT, url, '동시 요청 시 서버 오류 및 경쟁 상태 징후', f'concurrent status variance: {status_codes}', 'CWE-362')
+                    if not stable or any(fingerprint(r)!=fingerprint(baseline[0]) for r in valid):signals+=1
             except Exception as exc:
                 errors.append(str(exc)[:60])
-        status = 'FINDING' if found else 'ERROR' if errors else 'PASS' if tested else 'NOT_RUN'
-        reason = f'동시 5회 요청 대조 {tested}개 엔드포인트 완료, 이상 징후 {found}건.' if tested else '검사 가능한 엔드포인트를 찾지 못했습니다.'
-        record(self.bb, 'R15', '동시성 및 상태 일관성 대조', status, reason, tested, found, errors=len(errors))
+        status = 'ERROR' if errors else 'SIGNAL' if signals else 'PASS' if tested else 'NOT_RUN'
+        reason = f'단일 2회·동시 5회 대조 {tested}개 완료, 응답 변동 {signals}개, 오류 {len(errors)}개. 응답 차이만으로 경쟁 상태를 확정하지 않습니다.'
+        record(self.bb, 'R15', '동시성 및 상태 일관성 대조', status, reason, tested, errors=len(errors))
 
     async def teardown_lifecycle(self,client):
-        mode = getattr(self.options, 'mode', 'safe')
-        if mode != 'deep':
-            record(self.bb,'R14','테스트 데이터 생성 및 정리 생명주기','NOT_RUN','운영 안전 모드에서는 임의의 쓰기/정리 검사를 수행하지 않습니다. 샌드박스 모드를 선택하세요.')
-            return
-        if self.options.stored_cases:
-            record(self.bb, 'R14', '테스트 데이터 생성 및 정리 생명주기', 'PASS', '지정된 로컬 저장 및 정리(Teardown) 시나리오 검증 완료.', len(self.options.stored_cases), 0)
-        else:
-            record(self.bb, 'R14', '테스트 데이터 생성 및 정리 생명주기', 'PASS', '격리 샌드박스 모드: 안전 마커(wva_test_) 기반 데이터 격리 및 자동 Teardown 환경 검증 완료.', 1, 0)
+        receipts=self.bb.asset.metadata.get('cleanup_receipts',[])
+        attempted=[r for r in receipts if r['attempted']]
+        verified=[r for r in attempted if r['cleaned'] and r['verified']]
+        failed=len(attempted)-len(verified)
+        record(self.bb,'R14','테스트 데이터 생성 및 정리 생명주기',
+               'ERROR' if failed else 'PASS' if verified else 'NOT_RUN',
+               f'실제 작업 {len(attempted)}개, 정리·부재 확인 {len(verified)}개, 미확인 {failed}개. 실행하지 않은 작업은 성공으로 표시하지 않습니다.',
+               len(verified),errors=failed,required=bool(attempted))

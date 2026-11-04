@@ -213,6 +213,17 @@ ACTION_PLANS.update({
     ]
 })
 
+RULES['CREDENTIAL_RESPONSE']={
+    'summary':'미인증 응답에서 자격증명 필드 제거 및 노출 키 검토',
+    'impact':'노출 값이 실제 유효한 키이면 해당 키가 허용하는 응답 접근에 재사용될 수 있습니다.',
+    'actions':[],
+    'verification':['미인증 응답에서 비공개 키가 제거됐는지 확인합니다.','별도 계정 정책으로 정상 접근과 거부를 대조합니다.']}
+ACTION_PLANS['CREDENTIAL_RESPONSE']=[
+    ('노출 범위 확인','{endpoint}의 키 필드가 실제 인증정보인지, 공개·비공개 응답 정책과 유효 범위를 확인합니다.','실제 키와 공개 예시·식별자가 구분됩니다.'),
+    ('응답 최소화와 접근 검사','비공개 자격증명을 응답에서 제거하고 필요한 인증·소유권 정책을 서버에서 적용합니다.','미인증 응답에 비공개 키가 포함되지 않습니다.'),
+    ('실제 키 회수와 재검증','노출 값이 유효한 키이면 회수·교체하고 미인증·소유자·타 계정 요청을 재검증합니다.','폐기된 키는 거부되고 정상 계정의 허가된 기능은 유지됩니다.')]
+
+
 def finding_details(finding):
     data = finding.model_dump(mode="json") if hasattr(finding, "model_dump") else dict(finding)
     rule = RULES.get(data["vuln_type"], {
@@ -221,7 +232,9 @@ def finding_details(finding):
         "actions": [data.get("remediation") or "관찰 증거의 재현 조건을 확인하고 해당 기능의 통제를 보완합니다."],
         "verification": ["동일한 요청을 재실행해 문제 응답이 제거되고 정상 기능이 유지되는지 확인합니다."]})
     key = data["vuln_type"]
-    if data.get('id','').startswith('VULN-POLICY') and key in ('BOLA_IDOR','AUTH_BYPASS'):
+    if data.get('id','').startswith('VULN-BOLA') and key=='INFO_DISCLOSURE':
+        key='CREDENTIAL_RESPONSE'
+    elif data.get('id','').startswith('VULN-POLICY') and key in ('BOLA_IDOR','AUTH_BYPASS'):
         key='POLICY_OBJECT' if key=='BOLA_IDOR' else 'POLICY_ROLE'
     elif data.get("id", "").startswith("VULN-SECRET-LEAK"):
         key = "SCRIPT_SECRET"

@@ -1,5 +1,6 @@
 """Run functional tests and consolidate current evidence in TEST_GUIDE.md."""
 from datetime import datetime
+import hashlib
 import json
 from pathlib import Path
 import platform
@@ -22,6 +23,7 @@ def shareable_result(value):
     return value
 
 def consolidate():
+    current_exe=hashlib.sha256((ROOT/'WVA.exe').read_bytes()).hexdigest() if (ROOT/'WVA.exe').exists() else None
     rows = []
     xml = OUT / "pytest.xml"
     if xml.exists():
@@ -41,6 +43,10 @@ def consolidate():
             report.append("NOT_RUN — 검증 산출물이 없습니다.")
             continue
         data = json.loads(file.read_text(encoding="utf-8"))
+        bound_hash=data.get('sha256') or data.get('exe_sha256')
+        if bound_hash!=current_exe:
+            report += ['STALE — 현재 실행파일과 일치하지 않는 이전 검증 기록입니다. 이번 바이너리의 PASS 근거로 사용하지 않습니다.',f"- 기록 시각: {data.get('at','기록 없음')}"]
+            continue
         report += [f"- 결과: **{data['status']}**", f"- 수행 시각: {data.get('at','기록 없음')}"]
         if data.get("sha256"):
             report += [f"- 실행파일 SHA-256: `{data['sha256']}`",f"- 실행파일 크기: {data['bytes']:,} bytes"]
@@ -53,7 +59,7 @@ def consolidate():
         if data.get("error"):
             report.append("\n실패 원인: "+data["error"])
     benchmark = OUT / "benchmark" / "result.json"
-    if benchmark.exists():
+    if benchmark.exists() and json.loads(benchmark.read_text(encoding='utf-8')).get('exe_sha256')==current_exe:
         data = json.loads(benchmark.read_text(encoding="utf-8"))
         report += ["", "### 독립 취약 웹앱 벤치마크 (별도 수행 기록)", "",
                    f"- 수행 시각: {data.get('at','기록 없음')}",
@@ -64,11 +70,18 @@ def consolidate():
         if data.get('error'):
             report.append("- 실행 오류: "+data['error'])
     extended = OUT / "benchmark" / "extended-result.json"
-    if extended.exists():
+    if extended.exists() and json.loads(extended.read_text(encoding='utf-8')).get('exe_sha256')==current_exe:
         data=json.loads(extended.read_text(encoding="utf-8"))
         report += ["", "### 계정·저장형·시간 기반 source/exe 검증", "",f"- 수행 시각: {data.get('at')}",f"- 결과: **{data['status']}**, 검증 {len(data.get('checks',[]))}건.","- 원본: `artifacts/benchmark/extended-result.json`. 자체 SQLite 실습 앱의 결과이며 제3자 앱 측정과 구분합니다."]
         if data.get('error'):report.append('- 오류: '+data['error'])
-    visual = OUT / "visual-final" / "report.json"
+    report += ['', '### 최신 서버 규칙 source/exe 대조', '']
+    reliability=OUT/'reliability-2.6'/'acceptance.json'
+    if reliability.exists() and json.loads(reliability.read_text(encoding='utf-8')).get('exe_sha256')==current_exe:
+        result=json.loads(reliability.read_text(encoding='utf-8'))
+        report += [f"- 상태: **{result['status']}**, 실측 대조 {len(result.get('checks',[]))}건.",'- 실제 파일·표식 명령·HTTP 수신·업로드를 사용하는 로컬 취약/방어 쌍. 운영 사이트 정확도로 일반화하지 않습니다.']
+    else:report.append('- NOT_RUN — 현재 실행파일에 연결된 서버 규칙 검증 결과가 없습니다.')
+    report += ['', '이전 버전의 제3자 앱·확장 검증은 해당 기록의 해시와 수행 시각으로 구분합니다. 최신 실행파일과 일치하지 않으면 이번 검증 수에 합치지 않습니다.']
+    visual = OUT / "reliability-2.6" / "visual" / "report.json"
     if visual.exists():
         data = json.loads(visual.read_text(encoding="utf-8"))
         failures = sum(x["level"] == "FAIL" for x in data["findings"])
@@ -103,8 +116,16 @@ def consolidate():
 def main():
     OUT.mkdir(exist_ok=True,parents=True)
     if "--report-only" not in sys.argv:
+        def fingerprint():
+            return {p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+                    for folder in ['agents','core','dashboard','surface','reporting','tests'] for p in (ROOT/folder).rglob('*')
+                    if p.is_file() and p.suffix in ('.py','.js','.cjs','.html','.css') and '__pycache__' not in p.parts and 'artifacts' not in p.parts}
+        before=fingerprint()
         with (OUT / "pytest-output.txt").open("w",encoding="utf-8") as log:
             result=subprocess.run([sys.executable,"-m","pytest","-q","--junitxml="+str(OUT / "pytest.xml")],cwd=ROOT,stdout=log,stderr=subprocess.STDOUT)
+        provenance={'at':datetime.now().astimezone().isoformat(),'source_files':before,'unchanged_during_run':before==fingerprint(),'exit_code':result.returncode}
+        (OUT/'functional-provenance.json').write_text(json.dumps(provenance,indent=2),encoding='utf-8')
+        if not provenance['unchanged_during_run']:raise RuntimeError('테스트 도중 소스가 변경되어 결과를 확정하지 않았습니다. 동일한 소스로 재실행하세요.')
         print((OUT / "pytest-output.txt").read_text(encoding="utf-8"))
         consolidate()
         return result.returncode

@@ -59,10 +59,10 @@ def run():
         details = client.get("/api/scan/findings").json()
         check("detailed_remediation", all(f["remediation_details"]["steps"] and all(s["expected_result"] for s in f["remediation_details"]["steps"]) for f in details), "5 findings include ordered actions, completion criteria and verification")
         surface = client.get("/api/scan/surface").json()
-        check("integrated_version", client.get("/api/health").json()["version"] == "2.5.0", "Integrated executable identifies as WVA 2.5.0")
+        check("integrated_version", client.get("/api/health").json()["version"] == "2.6.0", "Integrated executable identifies as WVA 2.6.0")
         check("risk_and_ai_context", all(f["risk_context"]["limits"] and f["ai_prompt"] == f["remediation_details"]["ai_prompt"] for f in details), "Conditional risk limits and local AI prompt coexist in all five findings")
-        check("reference_grade", isinstance(status["score"], int) and status["grade"] in "ABCDF", {"score": status["score"], "grade": status["grade"]})
-        check("comparison_metadata", client.get("/api/scan/report/json").json()["scan_metadata"]["profile"]["ruleset"] == "2.5.0", "Completed report records scope and rule version")
+        check("reference_grade", isinstance(status["score"], int) and status["grade"] is None and not status['assessment_complete'], {"score": status["score"], "grade": status["grade"],"reason":"Default demo lacks required SQL/browser evidence; all aggregate grades are withheld"})
+        check("comparison_metadata", client.get("/api/scan/report/json").json()["scan_metadata"]["profile"]["ruleset"] == "2.6.0", "Completed report records scope and rule version")
         check("surface_metadata", surface["measured_count"] == 7 and surface["schema_only_count"] == 1, surface)
         log_file = Path(status["log_path"])
         check("persistent_scan_log", log_file.is_file() and '"status": "completed"' in log_file.read_text(encoding="utf-8"), str(log_file))
@@ -98,10 +98,15 @@ def run():
         result["error"] = str(exc)
         raise
     finally:
+        try:client.post('/api/app/shutdown',json={})
+        except httpx.HTTPError:pass
         client.close()
         if proc.poll() is None:
-            proc.terminate()
-            proc.wait(timeout=10)
+            try:proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                if os.name=='nt':subprocess.run(['taskkill','/PID',str(proc.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=subprocess.CREATE_NO_WINDOW)
+                else:proc.terminate()
+                proc.wait(timeout=10)
         (OUT / "executable-smoke.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"status":result["status"],"checks":len(result["checks"]),"bytes":result["bytes"],"sha256":result["sha256"]}, indent=2))
 

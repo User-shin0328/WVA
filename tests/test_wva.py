@@ -103,7 +103,7 @@ async def test_direct_target_hardened_profile(client):
     lab = LocalTestbed(hardened_app())
     target = await lab.start()
     try:
-        assert (await client.post("/api/scan/start", json={"target_url": target, "demo": False})).status_code == 200
+        assert (await client.post("/api/scan/start", json={"consent": True, "target_url": target, "demo": False})).status_code == 200
         status = await wait_scan(client)
         assert status["status"] == "completed", status
         assert status["findings_count"] == 0
@@ -117,7 +117,7 @@ async def test_unreachable_target_is_error(client):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    await client.post("/api/scan/start", json={"target_url": f"http://127.0.0.1:{port}"})
+    await client.post("/api/scan/start", json={"consent": True, "target_url": f"http://127.0.0.1:{port}"})
     status = await wait_scan(client)
     assert status["status"] == "error"
     assert status["error"]
@@ -132,7 +132,7 @@ async def test_duplicate_start_cancel_and_reset(client, monkeypatch):
             await asyncio.sleep(30)
     monkeypatch.setattr(dashboard, "VulnerabilityAnalysisEngine", SlowEngine)
     dashboard.state.last_error = "old error"
-    first = await client.post("/api/scan/start", json={"target_url": "http://127.0.0.1:8990"})
+    first = await client.post("/api/scan/start", json={"consent": True, "target_url": "http://127.0.0.1:8990"})
     assert first.status_code == 200
     assert (await client.post("/api/scan/start", json={"demo": True})).status_code == 409
     assert not dashboard.state.last_error

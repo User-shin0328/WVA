@@ -1,6 +1,6 @@
 # WVA 테스트 상세 설명 · 예상 결과 · 결과보고서
 
-갱신 기준: 2026-11-03, Windows 10 x64. 이 문서는 테스트 순서와 판정 기준을 설명하며, 마지막의 자동 생성 결과보고서에 실제 수행 결과를 합칩니다.
+갱신 기준: 2026-11-04, WVA 2.6, Windows 10 x64. 이 문서는 테스트 순서와 판정 기준을 설명하며, 마지막의 자동 생성 결과보고서에 실제 수행 결과를 합칩니다.
 
 ## 1. 테스트 목표와 구성
 
@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\Setup-TestEnvironment.ps1
 .\.venv\Scripts\python.exe -m tests.run_tests
 ```
 
-예상 결과: 총 123개 테스트가 통과합니다. 아래는 파라미터 조합을 포함한 분류입니다.
+예상 결과: 총 172개 테스트가 통과합니다. 아래 표는 기존 기능 분류이며, 2.6의 정상 반례·실제 파일/명령/HTTP/업로드·부분 실패·인증·그래프·manifest 검증이 추가됩니다. 정확한 개별 결과는 마지막 결과보고서에 나열합니다. 임시 산출물 폴더는 테스트 수집에서 제외합니다.
 
 | 검증 | 개수 | 상세 예상 결과 |
 | --- | ---: | --- |
@@ -168,7 +168,7 @@ powershell -ExecutionPolicy Bypass -File .\packaging\build.ps1
 .\.venv\Scripts\python.exe -m tests.smoke_executable
 ```
 
-예상 결과: `tests/artifacts/독립 실행 한글 경로/`에 exe만 복사하여 원본 소스 없이 실행합니다. 대시보드·로컬 자산·내장 데모·보고서·상세 조치·확장 표면 정보·진단 로그·선택 JSON/CSV 내보내기·이벤트·중복 실행·종료·포트 해제 및 2.5 검사 상태·내보내기 기능의 27개 검증이 통과해야 합니다. `executable-smoke.json`에 각 검증과 exe SHA-256을 기록합니다.
+예상 결과: `tests/artifacts/독립 실행 한글 경로/`에 exe만 복사하여 원본 소스 없이 실행합니다. 대시보드·로컬 자산·내장 데모·보고서·상세 조치·확장 표면 정보·진단 로그·선택 JSON/CSV 내보내기·이벤트·중복 실행·종료·포트 해제 및 2.6 검사 상태·내보내기 기능의 27개 검증이 통과해야 합니다. 기본 데모의 SQL/XSS 수행 전제가 충족되지 않으면 숫자 발견 점수는 유지하되 종합 등급은 보류여야 합니다. `executable-smoke.json`에 각 검증과 exe SHA-256을 기록합니다.
 
 첫 빌드에서 나타난 `[Errno 42] Illegal byte sequence`는 사용 중인 Python 런타임의 `ssl.py`가 읽는 인증서 정책 파일을 포함하지 않아 발생했습니다. 빌드 스크립트는 이 파일이 존재하면 함께 포함합니다. TLS 인증서 검증을 끄는 방식으로 우회하지 않습니다. 자동 테스트의 `--no-browser`에서는 오류를 로그와 실패 종료 코드로 반환하므로 오류 대화상자가 테스트를 가로막지 않습니다.
 
@@ -178,11 +178,13 @@ powershell -ExecutionPolicy Bypass -File .\packaging\build.ps1
 
 ```powershell
 node .\tests\ui_check.cjs
+# 임시 대시보드와 실습 대상을 자동 준비하고 종료하려면
+.\.venv\Scripts\python.exe -m tests.run_ui_checks --exe
 ```
 
 다른 환경에서는 Playwright가 설치된 `node_modules` 경로를 `WVA_NODE_MODULES`, Edge/Chrome 경로를 `WVA_BROWSER`로 지정합니다. 대시보드 주소는 `WVA_TEST_URL`, 테스트 대상은 `WVA_LAB_URL`로 바꿀 수 있습니다.
 
-예상 결과: 기본 38개, `$env:WVA_ACTIVE_LABS='1'`로 설치된 DVWA·Juice Shop 검사까지 켜면 총 40개 검증이 통과합니다. 기존 화면·차트·저장·반응형 검증 22건과 URL 범위 검증 7건에 상세 가독성·CSP 공격 조건·모바일 상세 창 검증 3건을 추가했습니다. 추가 4건은 권한 확인 미선택 차단, 완료 참고 등급, 기존 위험 설명과 AI 프롬프트 복사의 공존, 동일 범위 재진단 비교입니다. 상세 창은 문제 요약 → 확인한 내용 → 가능한 공격 → 판정 범위 → 조치 순서 → 수정 후 확인 순서이며, 원문 증거는 접고 조치는 첫 단계만 펼칩니다. 모든 조치 펼치기와 증거 원문 열기도 확인합니다. URL 범위 검증은 임시 로컬 서버를 직접 시작하고 종료합니다. 넓은 표는 자체 가로 스크롤을 사용합니다. 스크린샷은 `tests/artifacts/browser/`에 저장됩니다.
+예상 결과: 기본 40개, `$env:WVA_ACTIVE_LABS='1'`로 별도 설치한 DVWA·Juice Shop 검사까지 켜면 총 42개 검증이 통과합니다. 2.6은 검사 끄기 반영과 잘못된 프로필의 안전한 오류·비우기 검증을 추가했습니다. 기본 40개에는 진단·차트·상세·경로·표면·로그·선택 저장·반응형·중단·재진단 비교가 포함됩니다. 상세 창은 문제 요약 → 확인한 내용 → 가능한 공격 → 판정 범위 → 조치 순서 → 수정 후 확인 순서이며, 원문 증거는 접고 조치는 첫 단계만 펼칩니다. 새로고침하면 권한 동의는 다시 명시적으로 선택합니다. 임시 URL 범위 서버는 검사 도구가 종료합니다. 넓은 표는 자체 가로 스크롤을 사용하며 스크린샷은 `tests/artifacts/browser/`에 저장합니다. 이번 검증에서 설치형 앱 옵션을 수행했는지는 실제 결과의 수행 범위를 확인하세요.
 
 디자인은 Impeccable과 테이스트스킬의 앱 화면 기준을 적용했습니다. 어두운 표면, 흰 글씨, 청록색 1px 선, 실제 데이터 수치, 선택한 항목의 증거를 중심으로 구성했습니다. 자동 디자인 검사 결과는 스타일 관련 보조 판단이며 실제 기능 통과 결과와 구분합니다.
 
@@ -240,105 +242,154 @@ node .\tests\ui_check.cjs
 <!-- RESULTS:START -->
 ### 수행 환경과 검증 범위
 
-- 보고서 갱신 시각: 2026-11-04T09:06:11+09:00
+- 보고서 갱신 시각: 2026-11-04T16:28:38+09:00
 - 운영체제: Windows-10-10.0.19045-SP0
 - Python: 3.12.14
-- 기능 테스트: **123/123 PASS**
+- 기능 테스트: **172/172 PASS**
 - 외부 운영 사이트 진단은 수행하지 않았습니다. 로컬 실습 환경에 대한 검증입니다.
 
 ### 기능 테스트 상세 결과
 
 | 실제 테스트 | 결과 | 소요 |
 | --- | --- | ---: |
-| `test_sql_actual_sqlite_and_negative_conditions[sql-True-FINDING]` | PASS | 1.710초 |
-| `test_sql_actual_sqlite_and_negative_conditions[safe-sql-False-PASS]` | PASS | 1.577초 |
-| `test_sql_actual_sqlite_and_negative_conditions[unstable-False-SIGNAL]` | PASS | 1.351초 |
-| `test_sql_actual_sqlite_and_negative_conditions[waf-False-ERROR]` | PASS | 1.137초 |
-| `test_sql_actual_sqlite_and_negative_conditions[db-error-False-SIGNAL]` | PASS | 1.961초 |
-| `test_browser_execution_encoding_csp_and_dom[reflected-True]` | PASS | 3.406초 |
-| `test_browser_execution_encoding_csp_and_dom[safe-reflected-False]` | PASS | 4.798초 |
-| `test_browser_execution_encoding_csp_and_dom[csp-reflected-False]` | PASS | 4.650초 |
-| `test_browser_execution_encoding_csp_and_dom[spa/#/search?q=baseline-True]` | PASS | 3.680초 |
-| `test_browser_enforces_external_path_post_and_websocket_boundaries` | PASS | 3.340초 |
-| `test_response_and_request_caps_are_actual_boundaries` | PASS | 0.236초 |
-| `test_csrf_get_refresh_preserves_unrelated_repeated_query` | PASS | 0.237초 |
-| `test_real_login_csrf_and_private_object_role_policy` | PASS | 1.912초 |
-| `test_stored_xss_separate_read_and_verified_cleanup[False]` | PASS | 2.609초 |
-| `test_stored_xss_separate_read_and_verified_cleanup[True]` | PASS | 2.556초 |
-| `test_timing_uses_real_sqlite_conditional_delay` | PASS | 2.366초 |
-| `test_partial_check_does_not_receive_a_grade[R11-NOT_RUN]` | PASS | 0.012초 |
-| `test_partial_check_does_not_receive_a_grade[R09-ERROR]` | PASS | 0.005초 |
-| `test_extended_probes_reject_external_targets_without_post` | PASS | 1.078초 |
-| `test_missing_browser_is_not_run_instead_of_a_pass` | PASS | 1.225초 |
-| `test_cancel_stored_check_still_removes_owned_record` | PASS | 1.589초 |
-| `test_primary_session_is_used_for_normal_scan` | PASS | 0.994초 |
-| `test_validation_does_not_echo_profile_secrets` | PASS | 0.005초 |
-| `test_session_rescan_uses_the_same_redacted_comparison_profile` | PASS | 2.283초 |
+| `test_sql_actual_sqlite_and_negative_conditions[sql-True-FINDING]` | PASS | 1.455초 |
+| `test_sql_actual_sqlite_and_negative_conditions[safe-sql-False-PASS]` | PASS | 2.114초 |
+| `test_sql_actual_sqlite_and_negative_conditions[unstable-False-SIGNAL]` | PASS | 1.077초 |
+| `test_sql_actual_sqlite_and_negative_conditions[waf-False-ERROR]` | PASS | 1.298초 |
+| `test_sql_actual_sqlite_and_negative_conditions[db-error-False-SIGNAL]` | PASS | 2.121초 |
+| `test_browser_execution_encoding_csp_and_dom[reflected-True]` | PASS | 3.791초 |
+| `test_browser_execution_encoding_csp_and_dom[safe-reflected-False]` | PASS | 4.805초 |
+| `test_browser_execution_encoding_csp_and_dom[csp-reflected-False]` | PASS | 5.179초 |
+| `test_browser_execution_encoding_csp_and_dom[spa/#/search?q=baseline-True]` | PASS | 3.825초 |
+| `test_browser_enforces_external_path_post_and_websocket_boundaries` | PASS | 2.471초 |
+| `test_response_and_request_caps_are_actual_boundaries` | PASS | 5.087초 |
+| `test_csrf_get_refresh_preserves_unrelated_repeated_query` | PASS | 0.221초 |
+| `test_real_login_csrf_and_private_object_role_policy` | PASS | 2.271초 |
+| `test_stored_xss_separate_read_and_verified_cleanup[False]` | PASS | 2.703초 |
+| `test_stored_xss_separate_read_and_verified_cleanup[True]` | PASS | 2.412초 |
+| `test_timing_uses_real_sqlite_conditional_delay` | PASS | 2.405초 |
+| `test_partial_check_does_not_receive_a_grade[R11-NOT_RUN]` | PASS | 0.010초 |
+| `test_partial_check_does_not_receive_a_grade[R09-ERROR]` | PASS | 0.004초 |
+| `test_extended_probes_reject_external_targets_without_post` | PASS | 1.305초 |
+| `test_missing_browser_is_not_run_instead_of_a_pass` | PASS | 1.634초 |
+| `test_cancel_stored_check_still_removes_owned_record` | PASS | 1.671초 |
+| `test_primary_session_is_used_for_normal_scan` | PASS | 1.307초 |
+| `test_validation_does_not_echo_profile_secrets` | PASS | 0.006초 |
+| `test_session_rescan_uses_the_same_redacted_comparison_profile` | PASS | 2.117초 |
+| `test_request_budget_safe_and_deep_modes` | PASS | 0.002초 |
+| `test_policy_auditor_safe_mode_skips_deep_tests` | PASS | 0.001초 |
+| `test_policy_auditor_deep_mode_concurrency_and_teardown` | PASS | 0.002초 |
+| `test_audit_consent_api_and_deep_mode` | PASS | 0.042초 |
+| `test_scan_options_are_respected` | PASS | 0.029초 |
+| `test_legacy_lfi_cmdi_keywords_without_contract_do_not_confirm` | PASS | 0.001초 |
+| `test_legacy_ssrf_upload_keywords_without_contract_do_not_confirm` | PASS | 0.001초 |
+| `test_sql_success_banner_is_only_a_signal` | PASS | 0.003초 |
+| `test_build_verification_binds_source_and_binary[none]` | PASS | 0.005초 |
+| `test_build_verification_binds_source_and_binary[source]` | PASS | 0.005초 |
+| `test_build_verification_binds_source_and_binary[binary]` | PASS | 0.005초 |
 | `test_compute_score_and_grade` | PASS | 0.000초 |
-| `test_build_ai_prompt` | PASS | 0.000초 |
+| `test_build_ai_prompt` | PASS | 0.001초 |
 | `test_audit_js_secrets_detection` | PASS | 0.001초 |
 | `test_consent_validation_in_start_scan` | PASS | 0.004초 |
-| `test_surface_measured_metadata_and_openapi` | PASS | 1.485초 |
-| `test_persistent_utf8_scan_log_and_rotation` | PASS | 3.014초 |
-| `test_selected_export_formats_and_detailed_remediation[json]` | PASS | 1.631초 |
-| `test_selected_export_formats_and_detailed_remediation[md]` | PASS | 1.631초 |
-| `test_selected_export_formats_and_detailed_remediation[csv]` | PASS | 2.025초 |
+| `test_surface_measured_metadata_and_openapi` | PASS | 1.734초 |
+| `test_persistent_utf8_scan_log_and_rotation` | PASS | 4.393초 |
+| `test_selected_export_formats_and_detailed_remediation[json]` | PASS | 1.850초 |
+| `test_selected_export_formats_and_detailed_remediation[md]` | PASS | 1.958초 |
+| `test_selected_export_formats_and_detailed_remediation[csv]` | PASS | 1.569초 |
 | `test_header_remediation_does_not_mix_unrelated_policies[CSP]` | PASS | 0.001초 |
 | `test_header_remediation_does_not_mix_unrelated_policies[HSTS]` | PASS | 0.001초 |
 | `test_export_selection_validation[sections0-json]` | PASS | 0.005초 |
 | `test_export_selection_validation[sections1-json]` | PASS | 0.005초 |
-| `test_export_selection_validation[sections2-md]` | PASS | 0.008초 |
-| `test_export_selection_validation[sections3-xlsx]` | PASS | 0.005초 |
-| `test_export_requires_completed_current_scan_and_full_disk_logs` | PASS | 1.683초 |
-| `test_csv_preserves_rows_and_blocks_formulas` | PASS | 0.001초 |
-| `test_openapi_discovery_never_executes_declared_operations` | PASS | 0.005초 |
-| `test_unfinished_scan_has_no_grade_or_comparison[idle]` | PASS | 0.009초 |
-| `test_unfinished_scan_has_no_grade_or_comparison[running]` | PASS | 0.008초 |
-| `test_unfinished_scan_has_no_grade_or_comparison[stopped]` | PASS | 0.008초 |
-| `test_unfinished_scan_has_no_grade_or_comparison[error]` | PASS | 0.009초 |
+| `test_export_selection_validation[sections2-md]` | PASS | 0.005초 |
+| `test_export_selection_validation[sections3-xlsx]` | PASS | 0.004초 |
+| `test_export_requires_completed_current_scan_and_full_disk_logs` | PASS | 2.262초 |
+| `test_csv_preserves_rows_and_blocks_formulas` | PASS | 0.000초 |
+| `test_openapi_discovery_never_executes_declared_operations` | PASS | 0.004초 |
+| `test_unfinished_scan_has_no_grade_or_comparison[idle]` | PASS | 0.008초 |
+| `test_unfinished_scan_has_no_grade_or_comparison[running]` | PASS | 0.007초 |
+| `test_unfinished_scan_has_no_grade_or_comparison[stopped]` | PASS | 0.007초 |
+| `test_unfinished_scan_has_no_grade_or_comparison[error]` | PASS | 0.007초 |
 | `test_added_rules_preserve_specific_limits_and_ai_context[VULN-SECRET-LEAK-1-INFO_DISCLOSURE-\ubb38\uc790\uc5f4]` | PASS | 0.001초 |
 | `test_added_rules_preserve_specific_limits_and_ai_context[VULN-TLS-EXPIRING-1-MISSING_SECURITY_HEADER-\uc778\uc99d\uc11c]` | PASS | 0.001초 |
-| `test_baseline_excludes_incomplete_other_scope_and_current_copy` | PASS | 0.033초 |
-| `test_actual_repeat_scan_compares_only_same_profile` | PASS | 10.933초 |
-| `test_tls_expiry_uses_validated_async_connection_and_closes_writer[14-1]` | PASS | 0.040초 |
+| `test_baseline_excludes_incomplete_other_scope_and_current_copy` | PASS | 0.013초 |
+| `test_actual_repeat_scan_compares_only_same_profile` | PASS | 11.998초 |
+| `test_tls_expiry_uses_validated_async_connection_and_closes_writer[14-1]` | PASS | 0.039초 |
 | `test_tls_expiry_uses_validated_async_connection_and_closes_writer[60-0]` | PASS | 0.034초 |
-| `test_tls_cancel_propagates_instead_of_becoming_success` | PASS | 0.034초 |
+| `test_tls_cancel_propagates_instead_of_becoming_success` | PASS | 0.036초 |
+| `test_constant_sql_documentation_never_confirms[SQL Injection Vulnerability Detected]` | PASS | 0.007초 |
+| `test_constant_sql_documentation_never_confirms[SQL_INJECTION_PWNED]` | PASS | 0.006초 |
+| `test_constant_sql_documentation_never_confirms[Normal documentation]` | PASS | 0.007초 |
+| `test_default_system_checks_do_not_write_or_claim_safe` | PASS | 0.001초 |
+| `test_real_system_contracts_positive_and_defended[file-vulnerable-True]` | PASS | 0.352초 |
+| `test_real_system_contracts_positive_and_defended[file-safe-False]` | PASS | 0.339초 |
+| `test_real_system_contracts_positive_and_defended[command-vulnerable-True]` | PASS | 0.405초 |
+| `test_real_system_contracts_positive_and_defended[command-reflection-False]` | PASS | 0.308초 |
+| `test_real_system_contracts_positive_and_defended[ssrf-vulnerable-True]` | PASS | 0.529초 |
+| `test_real_system_contracts_positive_and_defended[ssrf-reflection-False]` | PASS | 0.417초 |
+| `test_real_system_contracts_positive_and_defended[ssrf-safe-False]` | PASS | 0.421초 |
+| `test_real_system_contracts_positive_and_defended[upload-vulnerable-True]` | PASS | 0.453초 |
+| `test_real_system_contracts_positive_and_defended[upload-reject-False]` | PASS | 0.420초 |
+| `test_real_system_contracts_positive_and_defended[upload-safe-False]` | PASS | 0.420초 |
+| `test_upload_cleanup_failure_is_error` | PASS | 0.451초 |
+| `test_authenticated_owner_is_not_unauthenticated_bola` | PASS | 0.001초 |
+| `test_concurrency_errors_are_not_pass[1]` | PASS | 0.002초 |
+| `test_concurrency_errors_are_not_pass[3]` | PASS | 0.002초 |
+| `test_concurrency_errors_are_not_pass[5]` | PASS | 0.002초 |
+| `test_teardown_requires_real_receipts` | PASS | 0.001초 |
+| `test_explicit_system_contract_rejects_unsafe_context_without_requests[safe-http://127.0.0.1]` | PASS | 0.001초 |
+| `test_explicit_system_contract_rejects_unsafe_context_without_requests[deep-https://example.invalid]` | PASS | 0.001초 |
+| `test_failed_stored_cleanup_cannot_be_reported_as_pass` | PASS | 0.001초 |
+| `test_selected_options_and_lower_budget_preserved` | PASS | 0.030초 |
+| `test_http_500_is_not_a_confirmed_race_condition` | PASS | 0.003초 |
+| `test_check_invariants[PASS-0-0-NOT_RUN]` | PASS | 0.001초 |
+| `test_check_invariants[PASS-1-1-ERROR]` | PASS | 0.001초 |
+| `test_consent_omission_and_remote_deep_rejected` | PASS | 0.007초 |
+| `test_graph_does_not_join_unrelated_credentials[value]` | PASS | 0.001초 |
+| `test_graph_does_not_join_unrelated_credentials[session]` | PASS | 0.001초 |
+| `test_graph_target_privilege_and_idempotence` | PASS | 0.001초 |
+| `test_unverified_privilege_never_creates_chain` | PASS | 0.000초 |
+| `test_large_graph_has_a_bounded_search` | PASS | 0.006초 |
+| `test_authenticated_debug_response_not_claimed_public` | PASS | 0.001초 |
+| `test_required_incomplete_checks_withhold_all_grades[NOT_RUN]` | PASS | 0.004초 |
+| `test_required_incomplete_checks_withhold_all_grades[SIGNAL]` | PASS | 0.004초 |
+| `test_required_incomplete_checks_withhold_all_grades[ERROR]` | PASS | 0.004초 |
+| `test_mixed_confirmed_and_inconclusive_withholds_grade` | PASS | 0.004초 |
 | `test_known_risk_explains_attack_conditions_and_observation_limits[VULN-CSP-1-MISSING_SECURITY_HEADER]` | PASS | 0.001초 |
-| `test_known_risk_explains_attack_conditions_and_observation_limits[VULN-HSTS-1-MISSING_SECURITY_HEADER]` | PASS | 0.004초 |
+| `test_known_risk_explains_attack_conditions_and_observation_limits[VULN-HSTS-1-MISSING_SECURITY_HEADER]` | PASS | 0.001초 |
 | `test_known_risk_explains_attack_conditions_and_observation_limits[debug-EXPOSED_DEBUG_ENDPOINT]` | PASS | 0.001초 |
 | `test_known_risk_explains_attack_conditions_and_observation_limits[object-BOLA_IDOR]` | PASS | 0.001초 |
 | `test_known_risk_explains_attack_conditions_and_observation_limits[admin-PRIVILEGE_ESCALATION]` | PASS | 0.001초 |
 | `test_known_risk_explains_attack_conditions_and_observation_limits[cors-CORS_MISCONFIGURATION]` | PASS | 0.001초 |
-| `test_known_risk_explains_attack_conditions_and_observation_limits[cookie-COOKIE_SECURITY_FLAG]` | PASS | 0.001초 |
+| `test_known_risk_explains_attack_conditions_and_observation_limits[cookie-COOKIE_SECURITY_FLAG]` | PASS | 0.000초 |
 | `test_unknown_type_does_not_invent_an_attack` | PASS | 0.000초 |
 | `test_profile_lists_are_not_shared_between_findings` | PASS | 0.000초 |
 | `test_security_header_explanations_remain_specific[VULN-CSP-1-\ub124\ud2b8\uc6cc\ud06c \uac00\ub85c\ucc44\uae30]` | PASS | 0.001초 |
 | `test_security_header_explanations_remain_specific[VULN-HSTS-1-\uc2a4\ud06c\ub9bd\ud2b8 \uc0bd\uc785]` | PASS | 0.001초 |
 | `test_risk_explanation_does_not_change_observed_evidence_or_severity` | PASS | 0.000초 |
-| `test_risk_context_survives_selected_and_automatic_reports[json]` | PASS | 1.561초 |
-| `test_risk_context_survives_selected_and_automatic_reports[md]` | PASS | 1.387초 |
-| `test_risk_context_survives_selected_and_automatic_reports[csv]` | PASS | 1.290초 |
+| `test_risk_context_survives_selected_and_automatic_reports[json]` | PASS | 2.236초 |
+| `test_risk_context_survives_selected_and_automatic_reports[md]` | PASS | 1.904초 |
+| `test_risk_context_survives_selected_and_automatic_reports[csv]` | PASS | 2.251초 |
 | `test_entry_path_and_query_are_preserved[https://example.com/app/]` | PASS | 0.001초 |
 | `test_entry_path_and_query_are_preserved[https://example.com/app/login?next=%2Fapp%2F&lang=ko]` | PASS | 0.000초 |
 | `test_entry_path_and_query_are_preserved[http://127.0.0.1:8990?empty=&tag=a&tag=b]` | PASS | 0.000초 |
 | `test_entry_path_and_query_are_preserved[https://example.com/api/item?value=tail/]` | PASS | 0.000초 |
 | `test_ambiguous_entry_path_cannot_expand_the_scope_to_root[/app/..]` | PASS | 0.000초 |
 | `test_ambiguous_entry_path_cannot_expand_the_scope_to_root[/app/%2e%2e/]` | PASS | 0.000초 |
-| `test_ambiguous_entry_path_cannot_expand_the_scope_to_root[/app/%252e%252e/]` | PASS | 0.000초 |
-| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/application]` | PASS | 0.000초 |
+| `test_ambiguous_entry_path_cannot_expand_the_scope_to_root[/app/%252e%252e/]` | PASS | 0.001초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/application]` | PASS | 0.001초 |
 | `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/private]` | PASS | 0.000초 |
 | `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/../private]` | PASS | 0.000초 |
 | `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/%2e%2e/private]` | PASS | 0.000초 |
-| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/%252e%252e/private]` | PASS | 0.000초 |
+| `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/%252e%252e/private]` | PASS | 0.001초 |
 | `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://example.com/app/%255c..%255cprivate]` | PASS | 0.000초 |
 | `test_path_boundary_rejects_siblings_traversal_and_other_origins[https://other.test/app/item]` | PASS | 0.000초 |
 | `test_path_boundary_rejects_siblings_traversal_and_other_origins[http://example.com/app/item]` | PASS | 0.000초 |
 | `test_scope_choice_is_explicit_and_query_not_copied_to_other_paths` | PASS | 0.000초 |
 | `test_query_variants_are_distinct_but_root_slash_is_not` | PASS | 0.000초 |
-| `test_mounted_app_follows_relative_links_and_keeps_actual_boundary` | PASS | 3.470초 |
-| `test_direct_query_endpoint_preserves_other_parameters_during_id_check` | PASS | 1.369초 |
-| `test_origin_choice_can_probe_root_but_still_requests_the_entry` | PASS | 3.899초 |
-| `test_dashboard_accepts_path_query_and_reports_selected_scope` | PASS | 3.476초 |
+| `test_mounted_app_follows_relative_links_and_keeps_actual_boundary` | PASS | 3.336초 |
+| `test_direct_query_endpoint_preserves_other_parameters_during_id_check` | PASS | 2.307초 |
+| `test_origin_choice_can_probe_root_but_still_requests_the_entry` | PASS | 3.645초 |
+| `test_dashboard_accepts_path_query_and_reports_selected_scope` | PASS | 4.322초 |
 | `test_same_origin_allowed[https://example.com/]` | PASS | 0.001초 |
 | `test_same_origin_allowed[https://example.com:443]` | PASS | 0.000초 |
 | `test_outside_origin_blocked[https://sub.example.com]` | PASS | 0.000초 |
@@ -352,54 +403,54 @@ node .\tests\ui_check.cjs
 | `test_destructive_paths_blocked[/%64elete]` | PASS | 0.000초 |
 | `test_destructive_paths_blocked[/%2564elete]` | PASS | 0.000초 |
 | `test_destructive_paths_blocked[/reset-db]` | PASS | 0.000초 |
-| `test_destructive_paths_blocked[/purchase]` | PASS | 0.001초 |
-| `test_invalid_target_rejected[example.com]` | PASS | 0.001초 |
-| `test_invalid_target_rejected[ftp://example.com]` | PASS | 0.001초 |
+| `test_destructive_paths_blocked[/purchase]` | PASS | 0.000초 |
+| `test_invalid_target_rejected[example.com]` | PASS | 0.000초 |
+| `test_invalid_target_rejected[ftp://example.com]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[https://a:b@example.com]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[http://localhost:99999]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[http://localhost:0]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[http://localhost/#section]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[http://localhost/%0Aprivate]` | PASS | 0.000초 |
 | `test_invalid_target_rejected[http://local host]` | PASS | 0.000초 |
-| `test_empty_state_and_report_gate` | PASS | 0.008초 |
+| `test_empty_state_and_report_gate` | PASS | 0.007초 |
 | `test_cross_origin_and_form_blocked` | PASS | 0.005초 |
 | `test_secure_cookie_is_not_false_positive` | PASS | 0.001초 |
 | `test_cors_requires_credentialed_reflection[*-true-0]` | PASS | 0.002초 |
 | `test_cors_requires_credentialed_reflection[https://evil-attacker.com-false-0]` | PASS | 0.002초 |
-| `test_cors_requires_credentialed_reflection[https://evil-attacker.com-true-1]` | PASS | 0.001초 |
-| `test_vulnerable_demo_and_reports` | PASS | 1.809초 |
-| `test_direct_target_hardened_profile` | PASS | 1.238초 |
-| `test_unreachable_target_is_error` | PASS | 2.092초 |
-| `test_duplicate_start_cancel_and_reset` | PASS | 0.013초 |
+| `test_cors_requires_credentialed_reflection[https://evil-attacker.com-true-1]` | PASS | 0.002초 |
+| `test_vulnerable_demo_and_reports` | PASS | 1.873초 |
+| `test_direct_target_hardened_profile` | PASS | 1.769초 |
+| `test_unreachable_target_is_error` | PASS | 2.109초 |
+| `test_duplicate_start_cancel_and_reset` | PASS | 0.015초 |
 | `test_events_broadcast_and_replay` | PASS | 0.003초 |
-| `test_redirects_do_not_escape_scope` | PASS | 1.430초 |
+| `test_redirects_do_not_escape_scope` | PASS | 1.654초 |
 
 ### 실행파일 독립 실행 결과
 
 - 결과: **PASS**
-- 수행 시각: 2026-11-04T09:00:00.299680+09:00
-- 실행파일 SHA-256: `9b664f6138c34aa39350cc953ce53c4437febb526d7cae932038ed4c6a8eeb1c`
-- 실행파일 크기: 65,658,315 bytes
+- 수행 시각: 2026-11-04T16:25:16.303811+09:00
+- 실행파일 SHA-256: `f94a3af53b1eec57d4060aecfd4003b14b99f4fc25cab362245f6d10417b09e7`
+- 실행파일 크기: 65,687,717 bytes
 
 | 검증 항목 | 결과 | 실제 결과 |
 | --- | --- | --- |
 | standalone_health | PASS | Copied exe starts from Korean path, no project sources |
-| bundled_asset:/ | PASS | {"status": 200, "bytes": 14368} |
-| bundled_asset:/static/app.css | PASS | {"status": 200, "bytes": 27732} |
-| bundled_asset:/static/app.js | PASS | {"status": 200, "bytes": 30025} |
+| bundled_asset:/ | PASS | {"status": 200, "bytes": 14901} |
+| bundled_asset:/static/app.css | PASS | {"status": 200, "bytes": 27881} |
+| bundled_asset:/static/app.js | PASS | {"status": 200, "bytes": 31984} |
 | bundled_asset:/static/fonts/NotoSansKR.ttf | PASS | {"status": 200, "bytes": 10414588} |
 | bundled_asset:/static/fonts/IBMPlexMono-Regular.ttf | PASS | {"status": 200, "bytes": 135580} |
 | start_demo | PASS | Embedded lab starts without Python subprocess |
-| demo_result | PASS | {"status": "completed", "target_url": "http://127.0.0.1:2149", "endpoints_count": 8, "findings_count": 5, "chains_count": 1, "severity": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 1, "LOW": 2, "INFO": 0}, "score": 46, "grade": "F", "checks": [{"rule_id": "BASE", "title": "헤더·쿠키·CORS·정보 노출", "status": "FINDING", "reason": "실제로 측정한 응답에 대한 기존 규칙 결과입니다.", "tested": 8, "findings": 3, "errors": 0, "version": "1.0"}, {"rule_id": "R11", "title": "SQL Injection 조건 대조", "status": "SIGNAL", "reason": "매개변수 2개 대조, 조건 쌍 2회 반복. 읽기 응답만 비교했습니다. 판정 보류: 정상 기준 응답 없음; 정상 기준 응답 없음", "tested": 2, "findings": 0, "errors": 0, "version": "1.0"}, {"rule_id": "R06", "title": "입력값 반사와 출력 문맥", "status": "PASS", "reason": "HTML 원시 반사 0개. 반사만으로 XSS를 확정하지 않습니다.", "tested": 2, "findings": 0, "errors": 0, "version": "1.0"}, {"rule_id": "R12", "title": "브라우저 XSS 실행 확인", "status": "NOT_RUN", "reason": "범위 안에서 HTML 반사 또는 JavaScript 라우트 후보가 없습니다.", "tested": 0, "findings": 0, "errors": 0, "version": "1.0"}, {"rule_id": "R09", "title": "계정 간 객체 권한 대조", "status": "NOT_RUN", "reason": "소유권·역할 정책과 테스트 세션을 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "version": "1.0"}, {"rule_id": "R10", "title": "역할별 관리 응답 대조", "status": "NOT_RUN", "reason": "소유권·역할 정책과 테스트 세션을 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "version": "1.0"}, {"rule_id": "R11-T", "title": "시간 기반 SQL 조건 대조", "status": "NOT_RUN", "reason": "로컬 시간 대조 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "version": "1.0"}, {"rule_id": "R12-S", "title": "저장형 XSS 실행 대조", "status": "NOT_RUN", "reason": "저장·조회·정리 URL을 가진 로컬 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "version": "1.0"}], "assessment_complete": false, "assessment_note": "판정 보류: SQL Injection 조건 대조, 브라우저 XSS 실행 확인", "error": "", "scan_id": "b273e3d111e7", "started_at": "2026-11-04T00:00:05.751177+00:00", "finished_at": "2026-11-04T00:00:07.180630+00:00", "demo": true, "report_paths": ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_090006_b273e3d111e7.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_090006_b273e3d111e7.json"], "phase": 4, "scope_mode": "path", "log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\scans\\20261104_090005_b273e3d111e7.jsonl", "log_error": "", "app_log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\WVA.log"} |
+| demo_result | PASS | {"status": "completed", "target_url": "http://127.0.0.1:13292", "mode": "safe", "endpoints_count": 8, "findings_count": 5, "chains_count": 1, "severity": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 1, "LOW": 2, "INFO": 0}, "score": 46, "grade": null, "checks": [{"rule_id": "BASE", "title": "헤더·쿠키·CORS·정보 노출", "status": "FINDING", "reason": "실제로 측정한 응답에 대한 기존 규칙 결과입니다.", "tested": 8, "findings": 3, "errors": 0, "inconclusive": 0, "required": true, "version": "2.6.0"}, {"rule_id": "IDOR", "title": "미인증 자격증명 응답 대조", "status": "FINDING", "reason": "미인증 자격증명 반복 대조 1개, 노출 1개. 소유권 정책은 별도 검사합니다.", "tested": 1, "findings": 1, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R11", "title": "SQL Injection 조건 대조", "status": "SIGNAL", "reason": "매개변수 2개 대조, 조건 쌍 2회 반복. 읽기 응답만 비교했습니다. 판정 보류: 정상 기준 응답 없음; 정상 기준 응답 없음", "tested": 2, "findings": 0, "errors": 0, "inconclusive": 2, "required": true, "version": "2.6.0"}, {"rule_id": "R06", "title": "입력값 반사와 출력 문맥", "status": "PASS", "reason": "HTML 원시 반사 0개. 반사만으로 XSS를 확정하지 않습니다.", "tested": 2, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R12", "title": "브라우저 XSS 실행 확인", "status": "NOT_RUN", "reason": "범위 안에서 HTML 반사 또는 JavaScript 라우트 후보가 없습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": true, "version": "2.6.0"}, {"rule_id": "R16", "title": "경로 순회 표식 파일 대조", "status": "NOT_RUN", "reason": "독립 증거를 확인할 로컬 실습 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R17", "title": "명령어 실행 표식 대조", "status": "NOT_RUN", "reason": "독립 증거를 확인할 로컬 실습 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R18", "title": "서버 요청 수신 기록 대조", "status": "NOT_RUN", "reason": "독립 증거를 확인할 로컬 실습 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R19", "title": "파일 저장·조회·정리 대조", "status": "NOT_RUN", "reason": "독립 증거를 확인할 로컬 실습 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R09", "title": "계정 간 객체 권한 대조", "status": "NOT_RUN", "reason": "소유권·역할 정책과 테스트 세션을 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R10", "title": "역할별 관리 응답 대조", "status": "NOT_RUN", "reason": "소유권·역할 정책과 테스트 세션을 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R11-T", "title": "시간 기반 SQL 조건 대조", "status": "NOT_RUN", "reason": "로컬 시간 대조 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R12-S", "title": "저장형 XSS 실행 대조", "status": "NOT_RUN", "reason": "저장·조회·정리 URL을 가진 로컬 시나리오를 지정하지 않았습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R15", "title": "동시성 및 상태 일관성 대조", "status": "NOT_RUN", "reason": "운영 안전 모드에서는 동시성 부하 검사를 수행하지 않습니다. 샌드박스 모드를 선택하세요.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "R14", "title": "테스트 데이터 생성 및 정리 생명주기", "status": "NOT_RUN", "reason": "실제 작업 0개, 정리·부재 확인 0개, 미확인 0개. 실행하지 않은 작업은 성공으로 표시하지 않습니다.", "tested": 0, "findings": 0, "errors": 0, "inconclusive": 0, "required": false, "version": "2.6.0"}, {"rule_id": "CHAIN", "title": "유출 키의 관리자 응답 접근 대조", "status": "FINDING", "reason": "미인증·잘못된 키 거부와 실제 키 응답을 대조했습니다. 확인 1개.", "tested": 1, "findings": 1, "errors": 0, "inconclusive": 0, "required": true, "version": "2.6.0"}, {"rule_id": "IO", "title": "요청 경계·응답 수신 완료", "status": "PASS", "reason": "요청 56회, 수신·한도·경계 오류 0회.", "tested": 56, "findings": 0, "errors": 0, "inconclusive": 0, "required": true, "version": "2.6.0"}], "assessment_complete": false, "assessment_note": "판정 보류: SQL Injection 조건 대조, 브라우저 XSS 실행 확인", "error": "", "scan_id": "fa8d2502f8fa", "started_at": "2026-11-04T07:25:20.355601+00:00", "finished_at": "2026-11-04T07:25:22.225551+00:00", "demo": true, "report_paths": ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_162522_fa8d2502f8fa.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_162522_fa8d2502f8fa.json"], "phase": 4, "scope_mode": "path", "log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\scans\\20261104_162520_fa8d2502f8fa.jsonl", "log_error": "", "app_log_path": "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\logs\\WVA.log"} |
 | report_download | PASS | 5 findings in downloaded JSON |
-| report_persistence | PASS | ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_090006_b273e3d111e7.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_090006_b273e3d111e7.json"] |
+| report_persistence | PASS | ["<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_162522_fa8d2502f8fa.md", "<프로젝트>\\tests\\artifacts\\독립 실행 한글 경로\\reports\\20261104_162522_fa8d2502f8fa.json"] |
 | detailed_remediation | PASS | 5 findings include ordered actions, completion criteria and verification |
-| integrated_version | PASS | Integrated executable identifies as WVA 2.5.0 |
+| integrated_version | PASS | Integrated executable identifies as WVA 2.6.0 |
 | risk_and_ai_context | PASS | Conditional risk limits and local AI prompt coexist in all five findings |
-| reference_grade | PASS | {"score": 46, "grade": "F"} |
+| reference_grade | PASS | {"score": 46, "grade": null, "reason": "Default demo lacks required SQL/browser evidence; all aggregate grades are withheld"} |
 | comparison_metadata | PASS | Completed report records scope and rule version |
-| surface_metadata | PASS | {"target_url": "http://127.0.0.1:2149", "methods": {"GET": 8}, "status_codes": {"200": 5, "unmeasured": 1, "422": 1, "403": 1}, "measured_count": 7, "schema_only_count": 1, "auth_response_count": 1, "tech_stack": ["Server: uvicorn"]} |
-| persistent_scan_log | PASS | <프로젝트>\tests\artifacts\독립 실행 한글 경로\logs\scans\20261104_090005_b273e3d111e7.jsonl |
+| surface_metadata | PASS | {"target_url": "http://127.0.0.1:13292", "methods": {"GET": 8}, "status_codes": {"200": 5, "unmeasured": 1, "422": 1, "403": 1}, "measured_count": 7, "schema_only_count": 1, "auth_response_count": 1, "tech_stack": ["Server: uvicorn"]} |
+| persistent_scan_log | PASS | <프로젝트>\tests\artifacts\독립 실행 한글 경로\logs\scans\20261104_162520_fa8d2502f8fa.jsonl |
 | selected_json_export | PASS | Only selected findings/logs plus provenance |
 | check_coverage | PASS | Versioned check statuses and unmet prerequisites are returned |
 | coverage_in_exports | PASS | Selected export preserves check scope and NOT_RUN reasons |
@@ -414,7 +465,7 @@ node .\tests\ui_check.cjs
 ### 브라우저 작업 흐름 결과
 
 - 결과: **PASS**
-- 수행 시각: 2026-11-04T00:01:00.279Z
+- 수행 시각: 2026-11-04T07:25:59.185Z
 
 | 검증 항목 | 결과 | 실제 결과 |
 | --- | --- | --- |
@@ -423,8 +474,8 @@ node .\tests\ui_check.cjs
 | running_motion | PASS | Spinner, scanning line and real stages activate; scope is locked |
 | completed_reference_grade | PASS | Reference score appears for a completed scan |
 | direct_target_scan | PASS | 5 findings, 1 chain, 8 endpoints |
-| check_coverage_and_scope | PASS | Eight check outcomes, unmet prerequisites and limited assessment are visible |
-| advanced_scan_controls | PASS | SQL, browser, parameter selection and local session/scenario profile are available in a collapsed section |
+| check_coverage_and_scope | PASS | Every actual check outcome and unmet prerequisite is visible |
+| scan_mode_controls | PASS | Scan mode and scope mode dropdowns are available adjacent to each other |
 | completion_motion | PASS | Completion check appears and stage labels disappear after completion |
 | charts_reconcile | PASS | Pie slices sum to 5; severity 1/1/1/2/0 and CVSS bins 1/1/2/1 |
 | expanded_finding_table | PASS | Severity, finding/CWE, method/path, CVSS, evidence, remediation summary |
@@ -455,23 +506,22 @@ node .\tests\ui_check.cjs
 | origin_scope_choice | PASS | Same-server choice includes root probes while retaining entry URL |
 | repeat_scan_comparison | PASS | Same target and scope show persistent findings; missing findings are not claimed as remediated |
 | stage_labels_terminal_states | PASS | Stage labels disappear on stopped and failed scans as well as completed scans |
-| actual_sql_finding_dialog | PASS | Installed DVWA SQLi is detected and has dedicated risks and ordered parameterization actions |
-| hash_route_xss_and_partial_grade | PASS | Installed Juice Shop DOM XSS is detected; absent server query coverage prevents an A grade and the detail fits mobile |
+| selected_checks_respected | PASS | Disabled SQL/browser checks remain NOT_RUN and optional |
+| profile_validation_and_clear | PASS | Invalid profile has a readable error without echoing file contents; clear works |
 | offline_assets | PASS | Zero external requests and zero JavaScript exceptions |
-
-### 독립 취약 웹앱 벤치마크 (별도 수행 기록)
-
-- 수행 시각: 2026-11-04T09:00:01+09:00
-- 상태: **PASS**. 환경·재현·결과 수집 상태이며 SQLi·XSS 탐지 통과가 아닙니다.
-- 독립 취약점·방어 대조 확인 6건, 소스/실행파일 진단 12건.
-- SQLi·XSS 양성 4개와 방어 대조 2개를 소스·실행파일에서 비교했습니다. 전체 사이트 정확도로 일반화하지 않습니다.
-- 설치·재실행: [독립 실습 절차](benchmarks/README.md). 상세 결과·한계: [벤치마크 결과](benchmarks/RESULTS.md).
 
 ### 계정·저장형·시간 기반 source/exe 검증
 
-- 수행 시각: 2026-11-04T09:01:36+09:00
+- 수행 시각: 2026-11-04T16:25:29+09:00
 - 결과: **PASS**, 검증 10건.
 - 원본: `artifacts/benchmark/extended-result.json`. 자체 SQLite 실습 앱의 결과이며 제3자 앱 측정과 구분합니다.
+
+### 최신 서버 규칙 source/exe 대조
+
+- 상태: **PASS**, 실측 대조 20건.
+- 실제 파일·표식 명령·HTTP 수신·업로드를 사용하는 로컬 취약/방어 쌍. 운영 사이트 정확도로 일반화하지 않습니다.
+
+이전 버전의 제3자 앱·확장 검증은 해당 기록의 해시와 수행 시각으로 구분합니다. 최신 실행파일과 일치하지 않으면 이번 검증 수에 합치지 않습니다.
 
 ### 디자인 보조 검사
 
@@ -480,7 +530,7 @@ node .\tests\ui_check.cjs
 - 768px: 페이지 가로 넘침 0px, JavaScript 예외 0개.
 - 390px: 페이지 가로 넘침 0px, JavaScript 예외 0개.
 - WARN `rainbow-chart`: The charts use 5 different hues.
-- WARN `tiny-text`: 67% of the text is under 13px.
+- WARN `tiny-text`: 63% of the text is under 13px.
 - 소스 lint: 0 FAIL, 2 WARN. 숫자·URL의 고정폭 글꼴과 미측정 값의 대시 표시는 데이터 표현에 사용합니다.
 - Impeccable detect: 보조 발견 2건. 진단 중 진행선 모션은 요청된 기능이며 완료 후 멈춥니다.
   - warning: Auto-scrolling marquee

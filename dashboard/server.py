@@ -27,7 +27,7 @@ from core.rules.redaction import public_data
 import hashlib
 
 STATIC_DIR = Path(__file__).parent / "static"
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -58,8 +58,13 @@ def compute_score_and_grade(findings):
         grade = "F"
     return score, grade
 
-def pending_checks(checks):
-    return [r['title'] for r in checks if r['status']=='ERROR' or r.get('errors',0)>0 or (r['rule_id'] in ('R11','R12') and r['status'] not in ('PASS','FINDING'))]
+def pending_checks(checks,required=()):
+    pending=[r['title'] for r in checks if r['status']=='ERROR' or r.get('errors',0)>0 or
+            (r.get('required',True) and r.get('inconclusive',0)>0) or
+            (r.get('required',True) and r['status'] not in ('PASS','FINDING')) or
+            (r['status']=='PASS' and r.get('tested',0)==0)]
+    pending += [r+' (결과 없음)' for r in required if r not in {c['rule_id'] for c in checks}]
+    return pending
 
 
 def get_previous_scan_report(target_url: str, current_scan_id: str, profile=None):
@@ -86,7 +91,7 @@ class ScanRequest(BaseModel):
     demo: bool = False
     scope_mode: Literal["path", "origin"] = "path"
     mode: Literal["safe", "deep"] = "safe"
-    consent: bool = True
+    consent: bool = False
     options: ScanOptions = Field(default_factory=ScanOptions)
 
     @field_validator("target_url")
@@ -167,7 +172,7 @@ async def run_scan_worker(target_url, is_demo, scope_mode="path", options=None):
         raise
     except Exception as exc:
         terminal_status = "error"
-        state.last_error = str(exc) or "진단 시간이 180초를 초과했습니다."
+        state.last_error = public_data(str(exc),state.blackboard.private_values if state.blackboard else ()) or "진단 시간이 180초를 초과했습니다."
         event_callback("log", "진단 실패: " + state.last_error)
     finally:
         if state.testbed:
@@ -228,6 +233,9 @@ async def start_scan(req: ScanRequest, request: Request = None):
         raise HTTPException(409, "진단이 진행 중입니다. 완료하거나 중단한 뒤 다시 시작하세요.")
     if not req.consent and not req.demo:
         raise HTTPException(400, "진단 권한 확인에 동의해야 시작할 수 있습니다.")
+    from agents.policy_auditor import loopback
+    if req.mode=='deep' and not req.demo and not loopback(req.target_url):
+        raise HTTPException(400,'로컬 심화 모드는 명시한 루프백 실습 주소에서만 실행할 수 있습니다.')
     scan_id = uuid.uuid4().hex[:12]
     log_path = data_root() / "logs" / "scans" / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + scan_id + ".jsonl")
     try:
@@ -246,15 +254,11 @@ async def start_scan(req: ScanRequest, request: Request = None):
     state.scope_mode = req.scope_mode
     state.mode = req.mode
     req.options.mode = req.mode
-    req.options.sql = True
-    req.options.browser = True
     state.options = req.options
-    if req.mode == "deep":
-        req.options.max_requests = max(req.options.max_requests, 1000)
     consent_log_dir = data_root() / "logs"
     consent_log_dir.mkdir(parents=True, exist_ok=True)
     consent_statement = (
-        "격리된 샌드박스/복제본 환경에서 수행되며 잠재적 부하 및 테스트 데이터 생성을 승인합니다 (정보통신망법 준수)."
+        "명시한 로컬 실습 대상의 선택한 검사와 테스트 데이터 생성을 승인합니다. 대상 환경의 격리는 별도로 확인해야 합니다."
         if req.mode == "deep"
         else "소유하거나 진단 권한을 득한 웹 대상에 대한 비파괴 안전 진단을 승인합니다."
     )
@@ -270,9 +274,11 @@ async def start_scan(req: ScanRequest, request: Request = None):
     }
     try:
         with (consent_log_dir / "audit_consent.jsonl").open("a", encoding="utf-8") as f:
-            f.write(json.dumps(consent_entry, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+            f.write(json.dumps(public_data(consent_entry), ensure_ascii=False) + "\n")
+    except OSError as exc:
+        state.status='error'
+        state.finished_at=now()
+        raise HTTPException(503,'점검 권한 동의 기록을 저장하지 못했습니다. 진단을 시작하지 않았습니다.') from exc
     state.target_url = req.target_url if not req.demo else "로컬 실습 환경 준비 중"
     event_callback("status", {"status": "running", "target_url": state.target_url})
     state.scan_task = asyncio.create_task(run_scan_worker(req.target_url, req.demo, req.scope_mode, req.options))
@@ -316,12 +322,14 @@ async def get_status():
         severity[f.severity.value] += 1
     checks=bb.asset.metadata.get('checks',[]) if bb else []
     score, grade = compute_score_and_grade(findings) if state.status == "completed" else (None, None)
-    pending=pending_checks(checks)
-    if pending and grade in ('A','B','C','D'):grade=None
+    required=bb.asset.metadata.get('required_checks',[]) if bb else []
+    pending=pending_checks(checks,required)
+    if bb and bb.asset.metadata.get('chain_truncated'):pending.append('연계 경로 탐색 상한')
+    if pending or not checks:grade=None
     return {"status": state.status, "target_url": state.target_url, "mode": getattr(state, "mode", "safe"),
             "endpoints_count": len(bb.asset.endpoints) if bb else 0,
             "findings_count": len(findings), "chains_count": len(bb.chains) if bb else 0,
-            "severity": severity, "score": score, "grade": grade, "checks":checks,"assessment_complete":bool(checks) and not pending,
+            "severity": severity, "score": score, "grade": grade, "checks":checks,"assessment_complete":state.status=='completed' and bool(checks) and not pending,
             "assessment_note":'전체 사이트 안전 등급이 아닌 발견 항목 기준 점수입니다.' if not pending else '판정 보류: '+', '.join(pending),
             "error": state.last_error, "scan_id": state.scan_id,
             "started_at": state.started_at, "finished_at": state.finished_at,
@@ -360,7 +368,8 @@ async def get_diff():
     prev_findings = prev.get("findings", [])
     prev_score, prev_grade = compute_score_and_grade(prev_findings)
     prev_checks=prev.get('scan_scope',{}).get('checks',[])
-    if prev_grade in ('A','B','C','D') and pending_checks(prev_checks):prev_grade=None
+    prev_scope=prev.get('scan_scope',{})
+    if not prev_checks or pending_checks(prev_checks,prev_scope.get('required_checks',[])) or prev_scope.get('chain_truncated'):prev_grade=None
     prev_ids = {f["id"]: f for f in prev_findings if isinstance(f, dict) and "id" in f}
     curr_ids = {f["id"]: f for f in curr_findings if isinstance(f, dict) and "id" in f}
 

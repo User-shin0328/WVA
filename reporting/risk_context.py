@@ -98,52 +98,59 @@ PROFILES.update({
 
 
 PROFILES.update({
+    'CREDENTIAL_RESPONSE': {
+        'summary':'별도 미인증 요청에서 사용자 식별자와 자격증명 필드가 반복 반환됐습니다.',
+        'observation':'인증 헤더·쿠키가 없는 요청에서 같은 식별자와 키 필드가 두 번 일치했습니다.',
+        'assessment':'미인증 자격증명 응답 확인',
+        'attacks':[{'name':'노출 키를 이용한 접근','scenario':'키가 실제 유효하고 보호 기능에서 받아들여지면 해당 키가 허용하는 응답에 접근할 수 있습니다.','conditions':['노출 값이 실제 인증정보여야 합니다.','후속 기능이 같은 키를 허용해야 하며 별도 접근 증거가 필요합니다.']}],
+        'limits':['필드 이름만으로 키의 유효성이나 객체 소유권 위반을 확정하지 않습니다.','키 사용 결과는 별도 발견 항목에서 확인합니다.'],
+        'references':[]},
     'PATH_TRAVERSAL': {
-        'summary': '디렉터리 순회 입력을 통해 서버 내부 시스템 파일이 노출되었습니다.',
-        'observation': '상대 경로(../) 삽입 요청에서 시스템 설정 파일(/etc/passwd, win.ini 등)의 실제 내용이 반환되었습니다.',
-        'assessment': '시스템 파일 열람 확인',
+        'summary': '파일 조회 경로 밖에 둔 무해한 실습 표식 파일이 반환됐습니다.',
+        'observation': '정상 기준 응답과 달리 명시한 실습 경로에서 알려진 파일 표식이 두 번 일치했습니다.',
+        'assessment': '실습 표식 파일 읽기 확인',
         'attacks': [{
             'name': '서버 설정 파일 및 자격증명 열람',
             'scenario': '공격자가 서버 파일 시스템의 환경변수, 소스코드, 데이터베이스 연결 정보, 비밀키를 직접 열람할 수 있습니다.',
             'conditions': ['웹 프로세스에 해당 파일 읽기 권한이 있어야 합니다.', '입력 경로 정규화 및 상위 디렉터리 이동 필터링이 누락되어야 합니다.']
         }],
-        'limits': ['확인된 동작은 파일 읽기 응답입니다. 시스템 파일 쓰기나 삭제는 수행하지 않았습니다.'],
+        'limits': ['명시한 무해한 표식 파일만 읽었습니다. 운영체제 파일·자격증명 열람이나 쓰기·삭제는 입증하지 않습니다.'],
         'references': [{'title': 'OWASP Path Traversal', 'url': OWASP + 'Path_Traversal_Cheat_Sheet.html'}]
     },
     'COMMAND_INJECTION': {
         'summary': '사용자 입력이 서버 측 운영체제 명령어 실행 경로로 직접 전달되었습니다.',
-        'observation': '명령어 구분자(; | &) 결합 시 whoami 등 시스템 명령 실행 결과가 응답에 반환되었습니다.',
+        'observation': '입력 원문에 연속해서 포함되지 않은 고유 출력 표식이 서로 다른 두 번의 대조에서 반환됐습니다.',
         'assessment': '원격 시스템 명령 실행 확인',
         'attacks': [{
             'name': '서버 운영체제 권한 장악 (RCE)',
             'scenario': '원격 공격자가 웹 서버 권한으로 임의의 시스템 명령을 실행하여 서버를 완전 장악하거나 내부망으로 침투할 수 있습니다.',
             'conditions': ['시스템 쉘 호출 함수(system, exec 등)가 입력을 적절히 정화하지 않고 실행해야 합니다.', '웹 서버 프로세스의 시스템 권한에 따라 실행 범위가 결정됩니다.']
         }],
-        'limits': ['whoami 등 비파괴 식별 명령의 출력만 관찰했습니다. 파괴적 명령(rm, drop, kill 등)은 일절 수행하지 않았습니다.'],
+        'limits': ['로컬 실습의 무해한 표식 출력만 확인했습니다. 실행 계정 권한·SYSTEM 권한·서버 장악은 확인하지 않았습니다.'],
         'references': [{'title': 'OWASP Command Injection Prevention', 'url': OWASP + 'OS_Command_Injection_Defense_Cheat_Sheet.html'}]
     },
     'SSRF': {
-        'summary': '서버가 내부망 또는 클라우드 메타데이터 IP로 위조된 HTTP 요청을 대신 전송했습니다.',
-        'observation': '169.254.169.254 등 사설 IP 요청 시 클라우드 인스턴스 메타데이터 또는 내부 서비스 응답이 반환되었습니다.',
+        'summary': '서버 요청과 로컬 실습 수신기의 고유 요청 기록이 연결됐습니다.',
+        'observation': '정상 대조에서는 수신 횟수 0, 각 고유 URL을 전달한 뒤에는 1회 수신이 두 번 확인됐습니다.',
         'assessment': '서버 측 요청 위조 확인',
         'attacks': [{
             'name': '내부 클라우드 자격증명 탈취 및 비공개 내부망 스캔',
             'scenario': '외부에서 접근할 수 없는 내부 인프라, 관리 포털, 클라우드 IAM 임시 자격증명(AccessKeyId)을 서버 권한으로 탈취할 수 있습니다.',
             'conditions': ['서버가 사용자가 지정한 임의 URL로 아웃바운드 연결을 시도해야 합니다.', '내부망 방화벽 또는 사설 IP 필터링이 부재해야 합니다.']
         }],
-        'limits': ['공개 메타데이터 응답 확인 수준이며 2차 클라우드 API 호출이나 권한 행사는 수행하지 않았습니다.'],
+        'limits': ['명시한 로컬 수신기만 사용했습니다. 클라우드 메타데이터 접근·자격증명 탈취·내부망 전체 접근은 검증하지 않았습니다.'],
         'references': [{'title': 'OWASP Server-Side Request Forgery Prevention', 'url': OWASP + 'Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html'}]
     },
     'ARBITRARY_FILE_UPLOAD': {
-        'summary': '서버 측에서 실행 가능한 위험 확장자 스크립트 파일의 업로드가 허용되었습니다.',
-        'observation': '.php 확장자의 테스트 파일이 거부 없이 업로드되고 저장 경로가 응답에 반환되었습니다.',
+        'summary': '위험 확장자의 무해한 텍스트 파일 저장과 별도 조회가 허용됐습니다.',
+        'observation': '명시적인 저장 성공 뒤 고유 파일 내용이 두 번 조회됐고 정리 후 파일 부재를 확인했습니다.',
         'assessment': '위험 확장자 파일 업로드 확인',
         'attacks': [{
             'name': '웹쉘(WebShell) 업로드를 통한 원격 코드 실행',
             'scenario': '공격자가 웹쉘 스크립트를 업로드한 후 웹 브라우저로 해당 파일 경로에 접근하여 서버 제어권을 획득할 수 있습니다.',
             'conditions': ['업로드된 파일이 웹 루트(Web Root) 아래 저장되어 직접 실행/호출 가능해야 합니다.', '파일 확장자 검증 및 실행 권한 제어가 누락되어야 합니다.']
         }],
-        'limits': ['무해한 텍스트 주석 파일로 확장자 허용 여부만 검증했습니다. 악성 웹쉘 코드를 업로드하거나 실행하지 않았습니다.'],
+        'limits': ['고유 텍스트 파일의 저장·조회·정리만 확인했습니다. 서버 측 스크립트 실행이나 웹쉘 동작은 입증하지 않습니다.'],
         'references': [{'title': 'OWASP File Upload Cheat Sheet', 'url': OWASP + 'File_Upload_Cheat_Sheet.html'}]
     }
 })

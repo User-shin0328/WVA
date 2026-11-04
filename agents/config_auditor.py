@@ -152,6 +152,9 @@ class ConfigAndHeaderAuditor(BaseAuditor):
             pass
 
     def _inspect_debug_response(self, resp: httpx.Response, endpoint: str):
+        if any(resp.request.headers.get(k) for k in ('authorization','x-api-key','cookie')):
+            self.blackboard.log('[Auditor:Config] 인증된 디버그 응답은 미인증 정보 노출로 확정하지 않았습니다.')
+            return
         try:
             data = resp.json()
             # Check for leaked user IDs, tokens, or debug flags

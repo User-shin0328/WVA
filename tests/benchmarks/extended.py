@@ -46,7 +46,7 @@ def executable(base,config):
         try:
             for _ in range(200):
                 try:
-                    if client.get('/api/health').json().get('version')=='2.5.0':break
+                    if client.get('/api/health').json().get('version')=='2.6.0':break
                 except httpx.HTTPError:pass
                 assert proc.poll() is None
                 time.sleep(.1)

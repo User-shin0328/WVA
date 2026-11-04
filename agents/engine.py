@@ -23,6 +23,16 @@ class VulnerabilityAnalysisEngine:
         self.blackboard.asset.metadata.update(scope_mode=scope_mode, scope_path=self.governance.scope_path or "/")
         self.options=options if isinstance(options,ScanOptions) else ScanOptions(**(options or {}))
         self.budget=RequestBudget(self.governance,self.options)
+        required=['BASE','IO']
+        if self.options.sql:required.append('R11')
+        if self.options.xss and self.options.browser:required.append('R12')
+        required += ['R09' if c.kind=='object' else 'R10' for c in self.options.access_cases]
+        if self.options.timing_cases:required.append('R11-T')
+        if self.options.stored_cases:required.extend(['R12-S','R14'])
+        mapping={'file':'R16','command':'R17','ssrf':'R18','upload':'R19'}
+        required += [mapping[c.kind] for c in self.options.system_cases]
+        if self.options.mode=='deep' and self.options.concurrency_check:required.append('R15')
+        self.blackboard.asset.metadata['required_checks']=list(dict.fromkeys(required))
         for profile in self.options.sessions:
             for values in [profile.headers,profile.cookies,profile.login_fields]:
                 self.blackboard.private_values.update(v.get_secret_value() for v in values.values())
@@ -63,7 +73,8 @@ class VulnerabilityAnalysisEngine:
             # 3. Access Control & BOLA Auditor
             self.blackboard.log("[Phase 3] Access Control & BOLA Differential Audit")
             idor_auditor = IdorAndBolaAuditor(self.blackboard, self.governance)
-            await idor_auditor.audit(client)
+            async with self.budget.client() as anonymous:
+                await idor_auditor.audit(anonymous)
             self.blackboard.log('[Phase 3] SQL 조건·입력 반사·브라우저 실행 대조')
             injection=InjectionAuditor(self.blackboard,self.governance,self.options)
             await injection.audit(client)
@@ -81,8 +92,11 @@ class VulnerabilityAnalysisEngine:
             # 4. Strategic Vulnerability Chaining Planner & Attack Graph
             self.blackboard.log("[Phase 4] Vulnerability Chaining & Attack Path Analysis")
             chain_planner = ChainPlannerAgent(self.blackboard, self.governance)
-            await chain_planner.audit(client)
+            async with self.budget.client() as anonymous:
+                await chain_planner.audit(anonymous)
 
         self.blackboard.log(f"=== Security Assessment Complete. Total Findings: {len(self.blackboard.findings)}, Chains: {len(self.blackboard.chains)} ===")
         self.blackboard.asset.metadata['request_budget']={'used':self.budget.count,'limit':self.options.max_requests,'max_response_bytes':self.options.max_response_bytes,'blocked':self.budget.blocked}
+        record(self.blackboard,'IO','요청 경계·응답 수신 완료','ERROR' if self.budget.failures else 'PASS',
+               f'요청 {self.budget.count}회, 수신·한도·경계 오류 {self.budget.failures}회.',self.budget.count,errors=self.budget.failures)
         return self.blackboard

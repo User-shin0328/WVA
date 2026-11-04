@@ -1,0 +1,13 @@
+{
+  "concurrency_check": false,
+  "system_cases": [
+    {"kind":"file","url":"http://127.0.0.1:18914/file/vulnerable","control_value":"guide.txt","probe_value":"../canary.txt","expected_marker":"WVA_BENIGN_FILE_CANARY_6e6de08c"},
+    {"kind":"file","url":"http://127.0.0.1:18914/file/safe","control_value":"guide.txt","probe_value":"../canary.txt","expected_marker":"WVA_BENIGN_FILE_CANARY_6e6de08c"},
+    {"kind":"command","url":"http://127.0.0.1:18914/command/vulnerable","shell":"windows"},
+    {"kind":"command","url":"http://127.0.0.1:18914/command/reflection","shell":"windows"},
+    {"kind":"ssrf","url":"http://127.0.0.1:18914/ssrf/vulnerable","callback_url":"http://127.0.0.1:18914/callback/{marker}","receipt_url":"http://127.0.0.1:18914/receipt/{marker}"},
+    {"kind":"ssrf","url":"http://127.0.0.1:18914/ssrf/safe","callback_url":"http://127.0.0.1:18914/callback/{marker}","receipt_url":"http://127.0.0.1:18914/receipt/{marker}"},
+    {"kind":"upload","url":"http://127.0.0.1:18914/upload/vulnerable","read_url":"http://127.0.0.1:18914/files/{filename}","cleanup_url":"http://127.0.0.1:18914/cleanup/ok"},
+    {"kind":"upload","url":"http://127.0.0.1:18914/upload/reject","read_url":"http://127.0.0.1:18914/files/{filename}","cleanup_url":"http://127.0.0.1:18914/cleanup/ok"}
+  ]
+}

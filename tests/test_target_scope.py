@@ -126,11 +126,11 @@ async def test_direct_query_endpoint_preserves_other_parameters_during_id_check(
     try:
         target = base + "/api/v1/user/profile?user_id=alice&lang=ko&tag=a&tag=b"
         bb = await VulnerabilityAnalysisEngine(target).execute_audit()
-        assert any(f.vuln_type.value == "BOLA_IDOR" for f in bb.findings.values())
+        assert any(f.vuln_type.value == "INFO_DISCLOSURE" for f in bb.findings.values())
         assert all(path == "/api/v1/user/profile" or path.startswith("/api/v1/user/profile/") for _,path,_ in hits)
         checks = [parse_qs(q) for _,p,q in hits if p == "/api/v1/user/profile"]
         assert all(q.get("lang") == ["ko"] and q.get("tag") == ["a", "b"] for q in checks)
-        finding = next(f for f in bb.findings.values() if f.vuln_type.value == "BOLA_IDOR")
+        finding = next(f for f in bb.findings.values() if f.vuln_type.value == "INFO_DISCLOSURE")
         assert parse_qs(urlsplit(finding.request_url).query) == {"user_id": ["alice"], "lang": ["ko"], "tag": ["a", "b"]}
     finally:
         await lab.stop()
@@ -156,7 +156,7 @@ async def test_dashboard_accepts_path_query_and_reports_selected_scope(client):
     base = await lab.start()
     try:
         target = base + "/app/?lang=ko"
-        response = await client.post("/api/scan/start", json={"target_url": target, "scope_mode": "path"})
+        response = await client.post("/api/scan/start", json={"consent": True, "target_url": target, "scope_mode": "path"})
         assert response.status_code == 200 and response.json()["target_url"] == target
         for _ in range(400):
             status = (await client.get("/api/scan/status")).json()

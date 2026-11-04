@@ -10,6 +10,15 @@ class ResourceLimit(ValueError):
     pass
 
 
+class BoundedClient(httpx.AsyncClient):
+    async def send(self, request, **kwargs):
+        try:
+            return await super().send(request, **kwargs)
+        except (httpx.HTTPError, ValueError):
+            self._wva_budget.failures += 1
+            raise
+
+
 class LimitedStream(httpx.AsyncByteStream):
     def __init__(self, stream, limit):
         self.stream,self.limit=stream,limit
@@ -49,6 +58,7 @@ class RequestBudget:
         self.lock=asyncio.Lock()
         self.last_request=0
         self.blocked=0
+        self.failures=0
 
     def allow_post(self, url):
         if not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(urlsplit(url).path):
@@ -72,15 +82,17 @@ class RequestBudget:
             if self.count>=self.options.max_requests:
                 raise ResourceLimit('전체 진단 요청 예산을 소진했습니다.')
             loop=asyncio.get_running_loop()
-            interval = .005 if getattr(self.options, 'mode', 'safe') == 'deep' else .025
+            interval = .025
             await asyncio.sleep(max(0, interval - (loop.time() - self.last_request)))
             self.last_request=loop.time()
             self.count+=1
 
     def client(self, **kwargs):
         headers={'Accept-Encoding':'identity',**kwargs.pop('headers',{})}
-        return httpx.AsyncClient(transport=BoundedTransport(self.options.max_response_bytes),follow_redirects=False,
-                                 trust_env=False,timeout=httpx.Timeout(5),event_hooks={'request':[self.enforce]},headers=headers,**kwargs)
+        client=BoundedClient(transport=BoundedTransport(self.options.max_response_bytes),follow_redirects=False,
+                            trust_env=False,timeout=httpx.Timeout(5),event_hooks={'request':[self.enforce]},headers=headers,**kwargs)
+        client._wva_budget=self
+        return client
 
 
 TOKEN=re.compile(r'csrf|token|nonce',re.I)

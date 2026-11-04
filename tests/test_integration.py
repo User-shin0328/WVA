@@ -62,7 +62,7 @@ async def test_actual_repeat_scan_compares_only_same_profile(client):
     base = await lab.start()
     try:
         async def scan(mode):
-            assert (await client.post('/api/scan/start', json={'target_url': base+'/app/', 'scope_mode': mode})).status_code == 200
+            assert (await client.post('/api/scan/start', json={'consent': True, 'target_url': base+'/app/', 'scope_mode': mode})).status_code == 200
             for _ in range(400):
                 status = (await client.get('/api/scan/status')).json()
                 if status['status'] != 'running':

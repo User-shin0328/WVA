@@ -35,7 +35,7 @@ class SecurityReportGenerator:
         report.append("## 1. Executive Summary (Vulnerability Chaining Analysis)")
         if chains:
             report.append("> [!CAUTION]")
-            report.append("> **CRITICAL ATTACK PATH DETECTED**: Multiple low/medium vulnerabilities can be chained by an attacker to achieve full administrative compromise.\n")
+            report.append("> **연계된 응답 접근 경로 확인**: 아래 증거의 연결 관계를 확인했습니다. 관리자 기능 실행이나 시스템 장악을 입증하지 않습니다.\n")
             for c in chains:
                 report.append(f"### {c.title}")
                 report.append(f"- **Severity**: **{c.cumulative_severity.value}**")
@@ -53,7 +53,7 @@ class SecurityReportGenerator:
                 # Connect steps
                 step_links = " --> ".join([f"Step{s.step_number}" for s in c.steps])
                 report.append(f"    {step_links}")
-                report.append(f'    Step{c.steps[-1].step_number} --> Impact["Admin Compromise"]')
+                report.append(f'    Step{c.steps[-1].step_number} --> Impact["{c.attained_privilege.value} response access"]')
                 report.append("```\n")
 
                 # Choke Point Defense

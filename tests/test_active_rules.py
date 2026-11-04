@@ -195,7 +195,7 @@ async def test_session_rescan_uses_the_same_redacted_comparison_profile(client,l
     try:
         options={'sql':False,'xss':False,'browser':False,'sessions':[profiles(base)[2]]}
         for _ in range(2):
-            assert (await client.post('/api/scan/start',json={'target_url':base,'scope_mode':'origin','options':options})).status_code==200
+            assert (await client.post('/api/scan/start',json={'consent': True, 'target_url':base,'scope_mode':'origin','options':options})).status_code==200
             for _ in range(400):
                 status=(await client.get('/api/scan/status')).json()
                 if status['status']!='running':break
@@ -203,5 +203,6 @@ async def test_session_rescan_uses_the_same_redacted_comparison_profile(client,l
             assert status['status']=='completed'
         diff=(await client.get('/api/scan/diff')).json()
         assert diff['has_previous'] and diff['new_count']==diff['fixed_count']==0
-        assert diff['current_grade'] is None and diff['previous_grade'] is None
+        assert diff['current_grade']==diff['previous_grade']=='A'
+        assert not any(c['required'] for c in status['checks'] if c['rule_id'] in ('R11','R12'))
     finally:await lab.stop()

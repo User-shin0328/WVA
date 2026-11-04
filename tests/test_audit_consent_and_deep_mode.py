@@ -70,10 +70,10 @@ async def test_policy_auditor_safe_mode_skips_deep_tests():
 
 @pytest.mark.asyncio
 async def test_policy_auditor_deep_mode_concurrency_and_teardown():
-    bb = SecurityBlackboard("http://example.com")
-    gov = SafetyGovernance("http://example.com")
+    bb = SecurityBlackboard("http://127.0.0.1")
+    gov = SafetyGovernance("http://127.0.0.1")
     ep = HttpEndpoint(
-        url="http://example.com/api/items?q=1",
+        url="http://127.0.0.1/api/items?q=1",
         path="/api/items",
         method="GET",
         parameters=["q"]
@@ -86,6 +86,8 @@ async def test_policy_auditor_deep_mode_concurrency_and_teardown():
     class DummyResponse:
         def __init__(self, status_code):
             self.status_code = status_code
+            self.headers = {}
+            self.text = 'stable'
 
     class DummyClient:
         async def get(self, url, timeout=4.0):
@@ -99,7 +101,7 @@ async def test_policy_auditor_deep_mode_concurrency_and_teardown():
     r15 = next(c for c in checks if "동시성" in c["title"])
     r14 = next(c for c in checks if "생명주기" in c["title"])
     assert r15["status"] == "PASS"
-    assert r14["status"] == "PASS"
+    assert r14["status"] == "NOT_RUN"
 
 @pytest.mark.asyncio
 async def test_audit_consent_api_and_deep_mode(client):
@@ -120,7 +122,7 @@ async def test_audit_consent_api_and_deep_mode(client):
     assert len(consent_logs) >= 1
     latest = consent_logs[-1]
     assert latest["mode"] == "deep"
-    assert "정보통신망법 준수" in latest["statement"]
+    assert "격리는 별도로 확인" in latest["statement"]
     assert latest["target_url"] == "http://127.0.0.1:8990"
 
     # Stop the scan
@@ -128,7 +130,7 @@ async def test_audit_consent_api_and_deep_mode(client):
     assert stop_res.status_code == 200
 
 @pytest.mark.asyncio
-async def test_unconditional_scan_options_enforcement(client):
+async def test_scan_options_are_respected(client):
     res = await client.post("/api/scan/start", json={
         "target_url": "http://127.0.0.1:8990",
         "consent": True,
@@ -136,8 +138,8 @@ async def test_unconditional_scan_options_enforcement(client):
     })
     assert res.status_code == 200
     import dashboard.server as d_server
-    assert d_server.state.options.sql is True
-    assert d_server.state.options.browser is True
+    assert d_server.state.options.sql is False
+    assert d_server.state.options.browser is False
     await client.post("/api/scan/stop", json={})
 
 from agents.system_auditor import SystemAuditor
@@ -145,7 +147,7 @@ from agents.injection_auditor import InjectionAuditor
 from core.models.vulnerability import VulnerabilityType
 
 @pytest.mark.asyncio
-async def test_system_auditor_lfi_and_cmdi_detection():
+async def test_legacy_lfi_cmdi_keywords_without_contract_do_not_confirm():
     bb = SecurityBlackboard("http://example.com")
     gov = SafetyGovernance("http://example.com")
     bb.asset.endpoints.append(HttpEndpoint(
@@ -185,17 +187,16 @@ async def test_system_auditor_lfi_and_cmdi_detection():
 
     findings = bb.get_findings_list()
     types = [f.vuln_type for f in findings]
-    assert VulnerabilityType.PATH_TRAVERSAL in types
-    assert VulnerabilityType.COMMAND_INJECTION in types
+    assert types == []
 
     checks = bb.asset.metadata.get("checks", [])
     r16 = next(c for c in checks if c["rule_id"] == "R16")
     r17 = next(c for c in checks if c["rule_id"] == "R17")
-    assert r16["status"] == "FINDING"
-    assert r17["status"] == "FINDING"
+    assert r16["status"] == "NOT_RUN"
+    assert r17["status"] == "NOT_RUN"
 
 @pytest.mark.asyncio
-async def test_system_auditor_ssrf_and_upload_detection():
+async def test_legacy_ssrf_upload_keywords_without_contract_do_not_confirm():
     bb = SecurityBlackboard("http://example.com")
     gov = SafetyGovernance("http://example.com")
     bb.asset.endpoints.append(HttpEndpoint(
@@ -239,17 +240,16 @@ async def test_system_auditor_ssrf_and_upload_detection():
 
     findings = bb.get_findings_list()
     types = [f.vuln_type for f in findings]
-    assert VulnerabilityType.SSRF in types
-    assert VulnerabilityType.ARBITRARY_FILE_UPLOAD in types
+    assert types == []
 
     checks = bb.asset.metadata.get("checks", [])
     r18 = next(c for c in checks if c["rule_id"] == "R18")
     r19 = next(c for c in checks if c["rule_id"] == "R19")
-    assert r18["status"] == "FINDING"
-    assert r19["status"] == "FINDING"
+    assert r18["status"] == "NOT_RUN"
+    assert r19["status"] == "NOT_RUN"
 
 @pytest.mark.asyncio
-async def test_injection_auditor_error_based_detection():
+async def test_sql_success_banner_is_only_a_signal():
     bb = SecurityBlackboard("http://example.com")
     gov = SafetyGovernance("http://example.com")
     bb.asset.endpoints.append(HttpEndpoint(
@@ -272,13 +272,13 @@ async def test_injection_auditor_error_based_detection():
         async def get(self, url, params=None, timeout=5.0):
             from urllib.parse import urlsplit, parse_qs
             q = (params or {}).get("q", "") or parse_qs(urlsplit(url).query).get("q", [""])[0]
-            if "OR 1=1" in q or "SQL" in q:
+            if "AND 1=" in q or "SQL" in q:
                 return MockResp("SQL Injection payload executed successfully! ARTEX{SQL_INJECTION_PWNED_8391}")
             return MockResp("Normal search result: 0 items")
 
     await auditor.audit(MockClient())
     findings = bb.get_findings_list()
-    assert any(f.vuln_type == VulnerabilityType.SQL_INJECTION for f in findings)
+    assert not any(f.vuln_type == VulnerabilityType.SQL_INJECTION for f in findings)
     checks = bb.asset.metadata.get("checks", [])
     r11 = next(c for c in checks if c["rule_id"] == "R11")
-    assert r11["status"] == "FINDING"
+    assert r11["status"] == "SIGNAL"

@@ -8,4 +8,6 @@ $extraData = @()
 if (Test-Path -LiteralPath $sslPolicyFile) { $extraData = @('--add-data', "$sslPolicyFile;.") }
 & $buildPython -m PyInstaller --noconfirm --clean --onefile --windowed --name WVA --icon (Join-Path $PSScriptRoot 'WVA.ico') --distpath $projectRoot --workpath (Join-Path $projectRoot 'build') --specpath $PSScriptRoot --add-data "$projectRoot/dashboard/static;dashboard/static" @extraData --exclude-module pytest --exclude-module PIL --collect-submodules uvicorn --collect-all playwright --hidden-import mock_target (Join-Path $projectRoot 'launcher.py')
 if ($LASTEXITCODE -ne 0) { throw '실행파일 빌드에 실패했습니다.' }
+& $buildPython (Join-Path $PSScriptRoot 'build_manifest.py')
+if ($LASTEXITCODE -ne 0) { throw '실행파일·소스 식별 정보 생성에 실패했습니다.' }
 Get-FileHash -LiteralPath (Join-Path $projectRoot 'WVA.exe') -Algorithm SHA256

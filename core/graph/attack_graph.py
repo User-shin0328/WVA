@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 import networkx as nx
+import hashlib
 from core.models.state import PrivilegeLevel, LeakedArtifactType
 from core.models.vulnerability import (
     VulnerabilityFinding, ExploitChain, ExploitChainStep, ChokePoint, Severity
@@ -39,12 +40,15 @@ class AttackGraphEngine:
 
             # Check required preconditions
             req_priv = finding.required_preconditions.get("privilege", PrivilegeLevel.UNAUTHENTICATED.value)
-            req_artifact = finding.required_preconditions.get("artifact_type")
+            req_artifact = finding.required_preconditions.get("artifact_ref")
 
             if req_artifact:
                 # Connected to an artifact state
-                artifact_state_node = f"ARTIFACT:{req_artifact}"
+                artifact_state_node = self.artifact_node(req_artifact)
                 self.graph.add_edge(artifact_state_node, vuln_node, relation="requires_artifact")
+            elif finding.required_preconditions.get('artifact_type'):
+                # An artifact type alone does not prove possession of this credential.
+                continue
             else:
                 # Connected to privilege state
                 priv_state_node = f"STATE:{req_priv}"
@@ -52,15 +56,34 @@ class AttackGraphEngine:
 
             # Check yielded postconditions
             yielded_priv = finding.yielded_postconditions.get("privilege")
-            if yielded_priv:
+            if yielded_priv and finding.yielded_postconditions.get('privilege_verified') is True:
                 target_state_node = f"STATE:{yielded_priv}"
                 self.graph.add_edge(vuln_node, target_state_node, relation="grants_privilege")
 
             yielded_artifact = finding.yielded_postconditions.get("leaked_artifact")
             if yielded_artifact:
-                artifact_type = yielded_artifact.get("type", "unknown")
-                artifact_state_node = f"ARTIFACT:{artifact_type}"
+                artifact_state_node = self.artifact_node(yielded_artifact)
                 self.graph.add_edge(vuln_node, artifact_state_node, relation="leaks_artifact")
+
+    def artifact_node(self, artifact):
+        identity='|'.join([self.blackboard.target_url,artifact.get('type','unknown'),artifact.get('value',''),artifact.get('session','anonymous')])
+        return 'ARTIFACT:'+hashlib.sha256(identity.encode()).hexdigest()[:24]
+
+    def bounded_paths(self, source, target):
+        stack=[(source,[source])];visits=found=0
+        while stack:
+            node,path=stack.pop();visits+=1
+            if visits>4000 or found>=100:
+                self.blackboard.asset.metadata['chain_truncated']=True
+                return
+            if node==target:
+                found+=1;yield path;continue
+            if len(path)>=13:
+                if any(n not in path for n in self.graph.successors(node)):
+                    self.blackboard.asset.metadata['chain_truncated']=True
+                continue
+            for successor in sorted(self.graph.successors(node),reverse=True):
+                if successor not in path:stack.append((successor,path+[successor]))
 
     def find_exploit_chains(self) -> List[ExploitChain]:
         """
@@ -68,6 +91,8 @@ class AttackGraphEngine:
         Synthesizes multi-step chains and computes defensive choke points.
         """
         self.build_graph()
+        self.blackboard.chains.clear()
+        self.blackboard.asset.metadata['chain_truncated']=False
         chains: List[ExploitChain] = []
         start_node = f"STATE:{PrivilegeLevel.UNAUTHENTICATED.value}"
         target_nodes = [
@@ -81,7 +106,7 @@ class AttackGraphEngine:
 
             try:
                 # Find all simple paths from start to target
-                paths = list(nx.all_simple_paths(self.graph, source=start_node, target=target))
+                paths = self.bounded_paths(start_node,target)
                 for i, path in enumerate(paths):
                     # Filter only vulnerability nodes in the path
                     vuln_steps: List[ExploitChainStep] = []
@@ -116,15 +141,15 @@ class AttackGraphEngine:
 
                     if len(vuln_steps) > 1:
                         # Multi-step chain discovered!
-                        chain_id = f"CHAIN-{i+1}"
+                        chain_id = 'CHAIN-'+hashlib.sha256('|'.join(path).encode()).hexdigest()[:12]
                         chain = ExploitChain(
                             chain_id=chain_id,
                             title=f"Multi-step Chained Escalation: {vuln_steps[0].action_description} -> {vuln_steps[-1].action_description}",
                             cumulative_severity=Severity.CRITICAL,
                             initial_privilege=PrivilegeLevel.UNAUTHENTICATED,
-                            attained_privilege=PrivilegeLevel.ADMIN,
+                            attained_privilege=PrivilegeLevel(target.removeprefix('STATE:')),
                             steps=vuln_steps,
-                            impact_summary=f"Chaining {len(vuln_steps)} individual findings escalates from Unauthenticated to Admin privilege access.",
+                            impact_summary=f"응답 증거 {len(vuln_steps)}개가 연결되어 {target.removeprefix('STATE:')} 응답 접근 경로를 구성합니다. 시스템 장악이나 관리자 기능 실행은 입증하지 않습니다.",
                             choke_points=choke_points
                         )
                         chains.append(chain)
