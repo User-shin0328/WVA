@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
+from fastapi.exceptions import RequestValidationError
 import uvicorn
 from agents.engine import VulnerabilityAnalysisEngine
 from core.graph.attack_graph import AttackGraphEngine
@@ -21,9 +22,12 @@ from dashboard.testbed import LocalTestbed
 from reporting.remediation import finding_details
 from reporting.selected_export import render_export
 from core.safety.target import normalize_target_url
+from core.rules.contracts import ScanOptions
+from core.rules.redaction import public_data
+import hashlib
 
 STATIC_DIR = Path(__file__).parent / "static"
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -54,6 +58,10 @@ def compute_score_and_grade(findings):
         grade = "F"
     return score, grade
 
+def pending_checks(checks):
+    return [r['title'] for r in checks if r['status']=='ERROR' or r.get('errors',0)>0 or (r['rule_id'] in ('R11','R12') and r['status'] not in ('PASS','FINDING'))]
+
+
 def get_previous_scan_report(target_url: str, current_scan_id: str, profile=None):
     if not profile:
         return None
@@ -78,6 +86,7 @@ class ScanRequest(BaseModel):
     demo: bool = False
     scope_mode: Literal["path", "origin"] = "path"
     consent: bool = True
+    options: ScanOptions = Field(default_factory=ScanOptions)
 
     @field_validator("target_url")
     @classmethod
@@ -124,7 +133,7 @@ def event_callback(event_type, data):
         except OSError as exc:
             state.log_error = "진단 로그 파일 기록 실패: " + str(exc)
 
-async def run_scan_worker(target_url, is_demo, scope_mode="path"):
+async def run_scan_worker(target_url, is_demo, scope_mode="path", options=None):
     terminal_status = "completed"
     try:
         if is_demo:
@@ -132,12 +141,14 @@ async def run_scan_worker(target_url, is_demo, scope_mode="path"):
             target_url = await state.testbed.start()
             state.target_url = target_url
             event_callback("log", "로컬 취약 실습 환경이 준비되었습니다.")
-        engine = VulnerabilityAnalysisEngine(target_url, event_callback=event_callback, scope_mode=scope_mode)
+        engine = VulnerabilityAnalysisEngine(target_url, event_callback=event_callback, scope_mode=scope_mode, options=options)
         state.blackboard = engine.blackboard
         await asyncio.wait_for(engine.execute_audit(), timeout=180)
         state.blackboard.asset.metadata["report_metadata"] = {
             "scan_id": state.scan_id, "completed": True,
-            "profile": {"scope_mode": state.scope_mode, "scope_path": engine.governance.scope_path or "/", "ruleset": VERSION}}
+            "profile": {"scope_mode": state.scope_mode, "scope_path": engine.governance.scope_path or "/", "ruleset": VERSION,
+                        "options": hashlib.sha256(json.dumps(engine.options.model_dump(mode='json',exclude={'sessions'}),sort_keys=True).encode()).hexdigest(),
+                        "accounts": sorted(s.alias for s in engine.options.sessions)}}
         reporter = SecurityReportGenerator(state.blackboard)
         report_dir = data_root() / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -178,6 +189,10 @@ async def lifespan(app):
     await cancel_scan()
 
 app = FastAPI(title="WVA Local Auditor", lifespan=lifespan)
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request,exc):
+    return JSONResponse({'detail':[{'loc':item['loc'],'msg':item['msg'],'type':item['type']} for item in exc.errors()]},status_code=422)
 
 @app.middleware("http")
 async def local_browser_boundary(request: Request, call_next):
@@ -228,7 +243,7 @@ async def start_scan(req: ScanRequest):
     state.scope_mode = req.scope_mode
     state.target_url = req.target_url if not req.demo else "로컬 실습 환경 준비 중"
     event_callback("status", {"status": "running", "target_url": state.target_url})
-    state.scan_task = asyncio.create_task(run_scan_worker(req.target_url, req.demo, req.scope_mode))
+    state.scan_task = asyncio.create_task(run_scan_worker(req.target_url, req.demo, req.scope_mode, req.options))
     return {"status": "started", "target_url": state.target_url, "demo": req.demo, "scan_id": state.scan_id, "scope_mode": req.scope_mode}
 
 @app.post("/api/scan/stop")
@@ -267,11 +282,16 @@ async def get_status():
     severity = dict.fromkeys(("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"), 0)
     for f in findings:
         severity[f.severity.value] += 1
+    checks=bb.asset.metadata.get('checks',[]) if bb else []
     score, grade = compute_score_and_grade(findings) if state.status == "completed" else (None, None)
+    pending=pending_checks(checks)
+    if pending and grade in ('A','B','C','D'):grade=None
     return {"status": state.status, "target_url": state.target_url,
             "endpoints_count": len(bb.asset.endpoints) if bb else 0,
             "findings_count": len(findings), "chains_count": len(bb.chains) if bb else 0,
-            "severity": severity, "score": score, "grade": grade, "error": state.last_error, "scan_id": state.scan_id,
+            "severity": severity, "score": score, "grade": grade, "checks":checks,"assessment_complete":bool(checks) and not pending,
+            "assessment_note":'전체 사이트 안전 등급이 아닌 발견 항목 기준 점수입니다.' if not pending else '판정 보류: '+', '.join(pending),
+            "error": state.last_error, "scan_id": state.scan_id,
             "started_at": state.started_at, "finished_at": state.finished_at,
             "demo": state.demo, "report_paths": state.report_paths,
             "phase": state.phase, "scope_mode": state.scope_mode, "log_path": state.log_path, "log_error": state.log_error,
@@ -283,7 +303,8 @@ async def get_diff():
         return {"has_previous": False, "comparison_status": "not_completed"}
     curr_findings = [finding_details(f) for f in state.blackboard.get_findings_list()]
     curr_score, curr_grade = compute_score_and_grade(curr_findings)
-    profile = state.blackboard.asset.metadata.get("report_metadata", {}).get("profile")
+    curr_grade=(await get_status())['grade']
+    profile = public_data(state.blackboard.asset.metadata.get("report_metadata", {}).get("profile"),state.blackboard.private_values)
     prev = get_previous_scan_report(state.target_url, state.scan_id, profile)
     if not prev or not isinstance(prev.get("findings"), list):
         return {
@@ -294,6 +315,8 @@ async def get_diff():
         }
     prev_findings = prev.get("findings", [])
     prev_score, prev_grade = compute_score_and_grade(prev_findings)
+    prev_checks=prev.get('scan_scope',{}).get('checks',[])
+    if prev_grade in ('A','B','C','D') and pending_checks(prev_checks):prev_grade=None
     prev_ids = {f["id"]: f for f in prev_findings if isinstance(f, dict) and "id" in f}
     curr_ids = {f["id"]: f for f in curr_findings if isinstance(f, dict) and "id" in f}
 
@@ -321,15 +344,15 @@ async def get_graph():
 
 @app.get("/api/scan/findings")
 async def get_findings():
-    return [finding_details(f) for f in state.blackboard.get_findings_list()] if state.blackboard else []
+    return [finding_details(public_data(f.model_dump(mode='json'),state.blackboard.private_values)) for f in state.blackboard.get_findings_list()] if state.blackboard else []
 
 @app.get("/api/scan/endpoints")
 async def get_endpoints():
-    return [e.model_dump(mode="json") for e in state.blackboard.asset.endpoints] if state.blackboard else []
+    return public_data([e.model_dump(mode="json") for e in state.blackboard.asset.endpoints],state.blackboard.private_values) if state.blackboard else []
 
 @app.get("/api/scan/chains")
 async def get_chains():
-    return [c.model_dump(mode="json") for c in state.blackboard.chains] if state.blackboard else []
+    return public_data([c.model_dump(mode="json") for c in state.blackboard.chains],state.blackboard.private_values) if state.blackboard else []
 
 @app.get("/api/scan/logs")
 async def get_logs():
@@ -369,7 +392,7 @@ async def selected_export(req: ExportRequest):
         raise HTTPException(409, "진단이 변경되었습니다. 현재 결과를 확인하고 다시 저장하세요.")
     payload = {"metadata": {"scan_id": state.scan_id, "target_url": state.target_url,
                             "started_at": state.started_at, "finished_at": state.finished_at,
-                            "status": state.status, "demo": state.demo, "scope_mode": state.scope_mode, "scope_path": state.blackboard.asset.metadata.get("scope_path", "/"), "exported_at": now()}}
+                            "status": state.status, "demo": state.demo, "scope_mode": state.scope_mode, "scope_path": state.blackboard.asset.metadata.get("scope_path", "/"), "checks":state.blackboard.asset.metadata.get('checks',[]),"exported_at": now()}}
     for section in req.sections:
         if section == "summary":
             status = await get_status()
@@ -388,7 +411,7 @@ async def selected_export(req: ExportRequest):
             except (OSError, ValueError) as exc:
                 raise HTTPException(503, "저장된 진단 로그를 읽지 못했습니다.") from exc
             payload[section] = [r for r in records if r["event"] == "log"]
-    content, media_type, extension = render_export(payload, req.format)
+    content, media_type, extension = render_export(public_data(payload,state.blackboard.private_values), req.format)
     return Response(content, media_type=media_type, headers={"Content-Disposition": f"attachment; filename=WVA_{state.scan_id}.{extension}"})
 
 def completed_report():

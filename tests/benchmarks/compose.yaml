@@ -1,0 +1,48 @@
+name: wva-benchmark
+services:
+  db:
+    image: mariadb@sha256:d769e37960821dfdcf096954f6e7ac89f747e116c1bba98e48edd265dfc7deae # mariadb:10.11
+    environment:
+      MYSQL_ROOT_PASSWORD: wva-local-root-only
+      MYSQL_DATABASE: dvwa
+      MYSQL_USER: dvwa
+      MYSQL_PASSWORD: wva-local-fixture-only
+    volumes:
+      - dvwa-data:/var/lib/mysql
+    networks: [lab]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  dvwa-low:
+    image: ghcr.io/digininja/dvwa@sha256:8029450682bd70e2e8cd1ffe8e46dd1885ff2a913296091cebfa8ba0a7d36498 # ghcr.io/digininja/dvwa:latest
+    environment:
+      DB_SERVER: db
+      DB_PASSWORD: wva-local-fixture-only
+      DEFAULT_SECURITY_LEVEL: low
+      DISABLE_AUTHENTICATION: "true"
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["127.0.0.1:18910:80"]
+    networks: [lab]
+  dvwa-safe:
+    image: ghcr.io/digininja/dvwa@sha256:8029450682bd70e2e8cd1ffe8e46dd1885ff2a913296091cebfa8ba0a7d36498 # ghcr.io/digininja/dvwa:latest
+    environment:
+      DB_SERVER: db
+      DB_PASSWORD: wva-local-fixture-only
+      DEFAULT_SECURITY_LEVEL: impossible
+      DISABLE_AUTHENTICATION: "true"
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["127.0.0.1:18911:80"]
+    networks: [lab]
+  juice-shop:
+    image: bkimminich/juice-shop@sha256:cea5a4af4aacee498c491491af0408934ec81d004035c0a02ef3e54395e3bf27 # bkimminich/juice-shop:v20.3.0
+    ports: ["127.0.0.1:18912:3000"]
+    networks: [lab]
+volumes:
+  dvwa-data:
+networks:
+  lab:
+    driver: bridge

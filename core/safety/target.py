@@ -33,7 +33,10 @@ def normalize_target_url(value: str) -> str:
     if port == 0:
         raise ValueError("1~65535 사이의 포트를 입력하세요.")
     if p.fragment:
-        raise ValueError("# 뒤의 화면 위치는 서버로 전송되지 않습니다. 해당 부분을 제외하세요.")
+        route=p.fragment[1:] if p.fragment.startswith('!/') else p.fragment
+        if not route.startswith('/'):
+            raise ValueError('일반 # 위치 대신 #/경로 형식의 JavaScript 라우트를 입력하세요.')
+        decoded_path(urlsplit(route).path)
     decoded_path(p.path)
     # Root-only URLs retain their previous spelling; a path/query is never stripped.
-    return urlunsplit((p.scheme, p.netloc, p.path if p.path != "/" or p.query else "", p.query, ""))
+    return urlunsplit((p.scheme, p.netloc, p.path if p.path != "/" or p.query else "", p.query, p.fragment))

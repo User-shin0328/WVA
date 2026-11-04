@@ -3,6 +3,7 @@ from urllib.parse import urlsplit, urlunsplit
 from core.models.asset import WebAsset, HttpEndpoint
 from core.models.state import SecurityState, LeakedArtifact, LeakedArtifactType
 from core.models.vulnerability import VulnerabilityFinding, ExploitChain
+from core.rules.redaction import public_data
 
 class SecurityBlackboard:
     """
@@ -18,15 +19,17 @@ class SecurityBlackboard:
         self.chains: List[ExploitChain] = []
         self.activity_logs: List[str] = []
         self.event_callback = event_callback
+        self.private_values=set()
 
     def emit(self, event_type: str, data: Any):
         if self.event_callback:
             try:
-                self.event_callback(event_type, data)
+                self.event_callback(event_type, public_data(data,self.private_values))
             except Exception:
                 pass
 
     def log(self, message: str):
+        message=public_data(message,self.private_values)
         self.activity_logs.append(message)
         self.emit("log", message)
 
@@ -47,6 +50,9 @@ class SecurityBlackboard:
             self.emit("endpoint", endpoint.model_dump())
 
     def add_finding(self, finding: VulnerabilityFinding):
+        artifact=finding.yielded_postconditions.get('leaked_artifact',{})
+        if artifact.get('type') in ('api_key','auth_token','secret_key') and artifact.get('value'):
+            self.private_values.add(artifact['value'])
         if finding.id not in self.findings:
             self.findings[finding.id] = finding
             self.log(f"[Finding] [{finding.severity.value}] {finding.title} at {finding.endpoint}")

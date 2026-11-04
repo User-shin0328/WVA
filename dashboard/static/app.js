@@ -12,7 +12,7 @@ let snapshot=null,findings=[],chains=[],endpoints=[],logs=[],surface={},diffData
 let renderKey='',refreshing=false,starting=false,stopping=false,shuttingDown=false,exporting=false,activeView='overview';
 
 function el(tag,className,text){const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;}
-function label(f){if(f.id.startsWith('VULN-CSP'))return '콘텐츠 보안 정책(CSP) 누락';if(f.id.startsWith('VULN-HSTS'))return 'HTTPS 강제 정책(HSTS) 누락';if(f.id.startsWith('VULN-SECRET-LEAK'))return '클라이언트 스크립트 API 키/시크릿 노출';if(f.id.startsWith('VULN-TLS-EXPIRING'))return 'SSL/TLS 인증서 만료 임박';return typeNames[f.vuln_type]||f.title;}
+function label(f){if(['SQL_INJECTION','XSS'].includes(f.vuln_type))return f.title;if(f.id.startsWith('VULN-CSP'))return '콘텐츠 보안 정책(CSP) 누락';if(f.id.startsWith('VULN-HSTS'))return 'HTTPS 강제 정책(HSTS) 누락';if(f.id.startsWith('VULN-SECRET-LEAK'))return '클라이언트 스크립트 API 키/시크릿 노출';if(f.id.startsWith('VULN-TLS-EXPIRING'))return 'SSL/TLS 인증서 만료 임박';return typeNames[f.vuln_type]||f.title;}
 function error(message){$('error').textContent=message||'';$('error').hidden=!message;}
 async function responseError(response){let msg='요청을 처리하지 못했습니다.';try{const body=await response.json();msg=Array.isArray(body.detail)?body.detail.map(x=>x.msg.replace(/^Value error, /,'')).join(' '):body.detail||msg;}catch(_){}return new Error(msg);}
 async function api(path,options){const response=await fetch(path,options);if(!response.ok)throw await responseError(response);return response.json();}
@@ -36,8 +36,8 @@ function renderStatus(){
   $('count-findings').textContent=s.findings_count.toLocaleString();$('count-chains').textContent=s.chains_count.toLocaleString();$('count-endpoints').textContent=s.endpoints_count.toLocaleString();
   const gradeEl=$('security-grade');
   if(gradeEl){
-    if(s.status==='completed'){
-      const grade=s.grade||'—';gradeEl.textContent=grade;
+    if(!running&&s.status==='completed'){
+      const grade=s.grade||(s.checks?.length?'보류':'—');gradeEl.textContent=grade;
       if(grade==='A'||grade==='B')gradeEl.style.color='var(--accent)';
       else if(grade==='C')gradeEl.style.color='#ffd43b';
       else if(grade==='D'||grade==='F')gradeEl.style.color='var(--danger)';
@@ -47,7 +47,8 @@ function renderStatus(){
     }
   }
   const scoreEl=$('security-score');
-  if(scoreEl)scoreEl.textContent=s.status==='completed'&&Number.isFinite(s.score)?(s.score+'점'):'—';
+  if(scoreEl)scoreEl.textContent=!running&&s.status==='completed'&&Number.isFinite(s.score)?(s.score+'점'):'—';
+  for(const button of document.querySelectorAll('.finding-name,.chain-step'))button.disabled=running;renderChecks();for(const input of document.querySelectorAll('.scan-option-fields input,.scan-option-fields button'))input.disabled=running;
   $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('scope-mode').disabled=running;$('demo').disabled=running;$('stop').hidden=!running;$('stop').disabled=starting||stopping;
   $('scan-phases').hidden=!running;
   const phase=starting?0:(s.phase||0);$('scan-phases').replaceChildren(...phases.map((name,index)=>{const item=el('li',index<phase?'done':index===phase&&running?'current':'',name);if(index===phase&&running)item.setAttribute('aria-current','step');return item;}));
@@ -55,6 +56,13 @@ function renderStatus(){
   $('scan-log-path').textContent=s.log_path||'—';$('app-log-path').textContent=s.app_log_path||'—';$('log-error').textContent=s.log_error||'';$('log-error').hidden=!s.log_error;$('save-scan-id').textContent=s.scan_id||'';
   if(s.error)error(s.error);updateExport();
 }
+const checkNames={PASS:'확인 완료',FINDING:'발견',SIGNAL:'판정 보류',NOT_RUN:'미실행',ERROR:'오류',NOT_SUPPORTED:'미지원'};
+function renderChecks(){
+  const rows=snapshot?.checks||[];$('check-count').textContent=rows.length+'개';
+  $('checks-body').replaceChildren(...rows.map(r=>{const tr=el('tr');tr.append(el('td','',r.title),el('td',r.status==='FINDING'?'severity HIGH':'',(checkNames[r.status]||r.status)+(r.errors?' · 일부 미완료':'')),el('td','numeric',String(r.tested)),el('td','check-reason',r.reason));return tr;}));
+  $('assessment-note').hidden=snapshot?.status!=='completed';$('assessment-note').textContent=snapshot?.assessment_note||'';
+}
+$('clear-profile').addEventListener('click',()=>{$('option-profile').value='';});
 function svg(tag,attributes={},text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attributes))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;return n;}
 function pieChart(host,entries,title){
   const width=Math.max(290,Math.round(host.getBoundingClientRect().width)-32),stacked=width<440;
@@ -175,7 +183,7 @@ async function updateDiff(){
         if(diffData?.has_previous){
           banner.hidden=false;
           const sign=diffData.score_diff>0?'+':'';
-          $('diff-summary-text').textContent=`${sign}${diffData.score_diff}점 변동 (이전 ${diffData.previous_score}점/${diffData.previous_grade} → 현재 ${diffData.current_score}점/${diffData.current_grade})`;
+          $('diff-summary-text').textContent=`${sign}${diffData.score_diff}점 변동 (이전 ${diffData.previous_score}점/${diffData.previous_grade||'보류'} → 현재 ${diffData.current_score}점/${diffData.current_grade||'보류'})`;
           $('diff-chip-fixed').textContent=`이번에 미발견 ${diffData.fixed_count}건`;
           $('diff-chip-new').textContent=`신규 발생 ${diffData.new_count}건`;
           $('diff-chip-persistent').textContent=`유지 ${diffData.persistent_count}건`;
@@ -191,7 +199,7 @@ async function updateDiff(){
 async function refresh(force=false){
   if(refreshing||shuttingDown)return;refreshing=true;
   try{
-    const s=await api('/api/scan/status');if(!snapshot&&s.scan_id){$('scope-mode').value=s.scope_mode||'path';if(!s.demo)$('target').value=s.target_url;}const key=[s.scan_id,s.status,s.findings_count,s.chains_count,s.endpoints_count].join('|');const changed=force||key!==renderKey;snapshot=s;renderStatus();
+    const s=await api('/api/scan/status');if(!snapshot&&s.scan_id){$('scope-mode').value=s.scope_mode||'path';if(!s.demo)$('target').value=s.target_url;}const key=[s.scan_id,s.status,s.findings_count,s.chains_count,s.endpoints_count].join('|');const changed=force||key!==renderKey;snapshot=s;
     if(changed||s.status==='running'){
       const data=await Promise.all(['/api/scan/findings','/api/scan/chains','/api/scan/endpoints','/api/scan/logs','/api/scan/surface'].map(p=>api(p)));
       [findings,chains,endpoints,logs,surface]=data;findings.sort((a,b)=>severityRank[a.severity]-severityRank[b.severity]);
@@ -203,6 +211,7 @@ async function refresh(force=false){
       }
       renderKey=key;renderAll();
     }
+    renderStatus();
   }catch(exc){error('서버 연결 실패: '+exc.message);}finally{refreshing=false;}
 }
 async function start(demo=false){
@@ -217,7 +226,7 @@ async function start(demo=false){
     const target=demo?'http://127.0.0.1:8989':$('target').value.trim();
     const scopeMode=demo?'path':$('scope-mode').value;
     const consent=demo?true:Boolean($('scan-consent')?.checked);
-    const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode,consent});
+    let options={};const file=$('option-profile').files[0];if(file){if(file.size>128000)throw new Error('검사 프로필은 128KB 이하로 선택하세요.');try{options=JSON.parse(await file.text());}catch(_){throw new Error('검사 프로필 JSON 형식을 확인하세요.');}}options={...options,sql:$('option-sql').checked,browser:$('option-browser').checked};if($('option-parameters').value.trim())options.parameters=$('option-parameters').value.split(',').map(v=>v.trim()).filter(Boolean);const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode,consent,options});
     selected=null;findings=[];chains=[];endpoints=[];logs=[];surface={};diffData=null;renderKey='';$('save-result').textContent='진단 완료 후 저장 가능';
     if($('diff-banner'))$('diff-banner').hidden=true;
     snapshot={...snapshot,status:'running',scan_id:result.scan_id,target_url:result.target_url,scope_mode:result.scope_mode,demo,findings_count:0,chains_count:0,endpoints_count:0,phase:0,started_at:new Date().toISOString(),finished_at:null,error:'',log_path:''};renderStatus();renderAll();await refresh(true);

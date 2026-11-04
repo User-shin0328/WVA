@@ -56,6 +56,12 @@ PROFILES = {
 
 
 PROFILES.update({
+    'POLICY_OBJECT':{'summary':'비공개로 지정한 객체가 허용되지 않은 계정에도 노출됐습니다.','observation':'소유자의 정상 응답과 거부 대상 계정의 보호 필드 값을 대조했습니다.','assessment':'명시한 계정·객체 정책 위반 확인',
+        'attacks':[{'name':'다른 계정의 비공개 정보 조회','scenario':'객체 식별자를 아는 사용자가 허용되지 않은 보호 데이터를 조회할 수 있습니다.','conditions':['정책상 비공개인 객체와 접근 가능한 식별자가 있어야 합니다.','조회 응답에 보호 정보가 실제로 포함돼야 합니다.']}],
+        'limits':['제공한 테스트 계정·객체·보호 필드의 정책을 기준으로 합니다. 공개·공유 객체를 자동으로 비공개라고 추정하지 않습니다.','변경·삭제 권한은 검사하지 않았습니다.'],'references':[{'title':'OWASP Authorization','url':OWASP+'Authorization_Cheat_Sheet.html'}]},
+    'POLICY_ROLE':{'summary':'관리자 전용으로 지정한 응답이 비관리자에게도 노출됐습니다.','observation':'관리자의 안정적인 보호 응답과 거부 대상으로 지정한 계정의 동일 필드를 대조했습니다.','assessment':'명시한 역할 정책 위반 확인',
+        'attacks':[{'name':'관리자 전용 정보의 무단 조회','scenario':'일반 계정 또는 미인증 요청자가 정책상 관리자에게만 허용한 정보를 읽을 수 있습니다.','conditions':['서버 기능이 실제 보호 데이터를 반환해야 합니다.','해당 계정은 명시한 정책상 허용되지 않아야 합니다.']}],
+        'limits':['보호 응답 읽기만 검사했습니다. 모든 관리자 작업 권한이나 시스템 장악을 증명하지 않습니다.'],'references':[{'title':'OWASP Authorization','url':OWASP+'Authorization_Cheat_Sheet.html'}]},
     "SCRIPT_SECRET": {
         "summary": "브라우저에 배포된 JavaScript에서 자격증명 형식의 문자열이 발견됐습니다.",
         "observation": "최대 5개 스크립트의 제한된 본문에서 키·토큰·개인 키 헤더 패턴을 확인했습니다.",
@@ -71,6 +77,24 @@ PROFILES.update({
         "limits": ["만료 임박은 공격 성공을 뜻하지 않으며 인증서 검증을 유지하면 잘못된 연결을 거부합니다.", "이미 만료되거나 신뢰할 수 없는 인증서는 연결 오류가 될 수 있습니다. 전체 TLS 설정·암호군 검사는 수행하지 않습니다."],
         "references": []},
 })
+
+PROFILES.update({
+    'SQL_INJECTION': {
+        'summary':'입력값의 SQL 조건 변경이 데이터 조회 결과에 영향을 줬습니다.',
+        'observation':'정상 기준과 참·거짓 조건을 반복 대조했습니다. 시간 기반 항목은 명시한 로컬 시나리오의 지연 차이로 확인했습니다.',
+        'assessment':'반복 조건 대조 확인',
+        'attacks':[{'name':'의도하지 않은 데이터 조회','scenario':'SQL 문법이 입력값으로 분리되지 않으면 조회 범위나 조건이 조작될 수 있습니다.','conditions':['입력값이 SQL 문맥에서 처리돼야 합니다.','공격자가 활용할 수 있는 DB 권한과 쿼리 형태가 있어야 합니다.']}],
+        'limits':['이번 검사는 조건 차이만 확인했습니다. 다른 테이블·비밀번호 추출, DB 쓰기, OS 명령 실행은 하지 않았습니다.','검사한 매개변수·세션·조회 경로 밖의 모든 SQL 주입을 탐지한다는 뜻이 아닙니다.'],
+        'references':[{'title':'OWASP SQL Injection Prevention','url':OWASP+'SQL_Injection_Prevention_Cheat_Sheet.html'}]},
+    'XSS': {
+        'summary':'사용자 입력에서 유래한 코드가 브라우저 문서에서 실행됐습니다.',
+        'observation':'별도 브라우저 컨텍스트에서 고유 실행 표식과 문서 출처를 확인했습니다. 반사·DOM·저장형 구분은 관찰 증거를 따릅니다.',
+        'assessment':'브라우저 실행 표식 확인',
+        'attacks':[{'name':'사용자 화면과 브라우저 동작 조작','scenario':'피해자가 해당 입력을 포함한 페이지를 열면 스크립트가 페이지 내용을 바꾸거나 사용자 권한의 동작을 시도할 수 있습니다.','conditions':['피해자가 취약한 입력이 포함된 문서를 열어야 합니다.','실행 문맥과 CSP·브라우저 방어 정책이 해당 코드를 허용해야 합니다.']}],
+        'limits':['고유 표식만 실행했으며 사용자 쿠키 읽기·외부 전송·계정 작업은 수행하지 않았습니다.','특정 브라우저·문서·입력에 대한 실행 확인이며 모든 XSS 문맥이나 피해 규모를 증명하지 않습니다.'],
+        'references':[{'title':'OWASP XSS Prevention','url':OWASP+'Cross_Site_Scripting_Prevention_Cheat_Sheet.html'}]}
+})
+
 
 def risk_context(data, rule_key):
     profile = PROFILES.get(rule_key)

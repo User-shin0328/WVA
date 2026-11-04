@@ -4,7 +4,7 @@
 
 Python 분석 엔진(`agents/engine.py`)이 고정 경로와 HTML 링크·폼을 수집하고, 헤더·디버그 정보·BOLA·수집 키의 관리자 응답 접근을 검사합니다. `core/graph/attack_graph.py`는 수집된 전제 조건과 산출물을 연결하여 NetworkX 경로를 추론합니다. 기존 파일 이름의 Multi-Agent는 프로그램 내부의 고정 단계 모듈을 뜻하며 외부 LLM 호출 구현은 확인되지 않았습니다.
 
-`surface/reflection.py`는 존재하지만 기본 엔진 흐름에서 호출하지 않습니다. 본 대시보드가 반사 취약점·XSS·SQL 주입을 검증한다고 표시하지 않습니다. JSON은 WVA 자체 스키마이며 SARIF 호환 형식이 아닙니다.
+`surface/reflection.py`는 존재하지만 기본 엔진 흐름에서 호출하지 않습니다. 2.5는 새 InjectionAuditor와 BrowserAuditor를 기본 엔진에 연결해 반사 신호·SQL 조건 대조·브라우저 XSS 실행을 검사합니다. 레거시 reflection.py 자체를 엔진으로 연결한 것은 아닙니다. JSON은 WVA 자체 스키마이며 SARIF 호환 형식이 아닙니다.
 
 시작 시 `.exe`나 기존 PyInstaller 패키지는 없었습니다. 한국어/영문 배치 실행기 6개가 중복으로 있었습니다. 분석 코드와 기존 보고서는 유지하고 이 배치 파일만 삭제했습니다.
 
@@ -55,3 +55,7 @@ Python 분석 엔진(`agents/engine.py`)이 고정 경로와 HTML 링크·폼을
 ## 2.4 통합 검증
 
 로컬 2.3 상세 창과 GitHub 428d272의 기능을 통합했다. 새 JavaScript 패턴 및 TLS 만료 임박 항목에도 개별 위험 설명·판정 범위·순서별 조치를 제공한다. TLS 연결은 비동기 방식으로 중단을 전달하고 연결을 닫는다. 진단 참고 등급은 완료 시에만 표시하며 실패·중단을 안전으로 표현하지 않는다. 보고서에는 완료 여부·진단 ID·범위·규칙 버전을 기록하고 동일 프로필의 재진단만 비교한다. AI 프롬프트에는 관찰 사실·판정 한계를 포함하며 응답 증거를 명령으로 취급하지 않도록 구분한다. 상세 검증 수치와 실행파일 식별자는 INTEGRATION_REPORT.md와 BUILD_INFO.json을 따른다.
+
+## 2.5 실행 경로와 검증 보완
+
+`core/http/requester.py`의 공통 요청 예산·응답 스트림 제한·CSRF 준비와 `core/rules/contracts.py`의 버전별 검사 결과 계약을 추가했다. `InjectionAuditor`는 안정적인 기준과 조건 쌍을 반복 대조하고 `BrowserAuditor`는 격리된 문서 실행과 실제 JavaScript 라우트를 확인한다. `PolicyAuditor`는 명시한 테스트 세션의 객체·역할 정책과 로컬 저장형/시간 기반 시나리오를 실행한다. `redaction.py`로 비밀 값의 공개 출력과 내부 실행 값을 분리했다. 검사 상태는 보고서와 화면에 함께 제공하며 누락 검사를 높은 등급으로 가리지 않는다. 제3자 DVWA·Juice Shop과 자체 SQLite 실습 앱을 분리해 검증한다. 최신 실제 결과와 제한은 IMPLEMENTATION_REPORT_2.5.md를 따른다.

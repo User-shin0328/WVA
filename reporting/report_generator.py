@@ -4,6 +4,7 @@ from core.graph.blackboard import SecurityBlackboard
 from reporting.remediation import finding_details
 from reporting.risk_context import risk_context_lines
 from reporting.selected_export import ordered_action_lines
+from core.rules.redaction import public_data
 
 class SecurityReportGenerator:
     """
@@ -25,6 +26,10 @@ class SecurityReportGenerator:
         report.append(f"- **Discovered Endpoints**: {len(bb.asset.endpoints)}")
         report.append(f"- **Total Individual Findings**: {len(findings)}")
         report.append(f"- **Identified Exploit Chains**: {len(chains)}\n")
+        report += ['## 검사별 수행 상태', '', '| 검사 | 상태 | 수행 | 사유 |', '| --- | --- | ---: | --- |']
+        for check in bb.asset.metadata.get('checks',[]):
+            report.append(f"| {check['title']} | {check['status']} | {check['tested']} | {check['reason']} |")
+        report += ['', '점수와 등급은 발견된 항목에 한정하며 미실행·오류를 안전으로 판단하지 않습니다.', '']
 
         # 1. Executive Summary & Chained Threats
         report.append("## 1. Executive Summary (Vulnerability Chaining Analysis)")
@@ -89,13 +94,13 @@ class SecurityReportGenerator:
             report.append(f"- `{ep.method} {ep.path}` ({auth_str}) [Source: {ep.source}]")
         report.append("\n")
 
-        return "\n".join(report)
+        return public_data("\n".join(report),bb.private_values)
 
     def generate_json_report(self) -> Dict[str, Any]:
         bb = self.blackboard
-        return {
+        return public_data({
             "schema": "wva-report-2",
-            "assessment_scope": "Heuristic read-only checks; inferred attack paths; not SARIF or a complete penetration test.",
+            "assessment_scope": "Bounded checks: GET/HEAD by default; explicitly declared session login and local fixture write/cleanup may use POST. Inferred attack paths; not SARIF or a complete penetration test.",
             "target_url": bb.target_url,
             "scan_scope": bb.asset.metadata,
             "scan_metadata": bb.asset.metadata.get("report_metadata", {}),
@@ -103,4 +108,4 @@ class SecurityReportGenerator:
             "findings": [finding_details(f) for f in bb.get_findings_list()],
             "exploit_chains": [c.model_dump() for c in bb.chains],
             "activity_logs": bb.activity_logs
-        }
+        },bb.private_values)

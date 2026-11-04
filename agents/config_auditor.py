@@ -55,7 +55,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
         headers = {k.lower(): v for k, v in resp.headers.items()}
         
         # CSP Check
-        if "content-security-policy" not in headers:
+        if "content-security-policy" not in headers and any(t in headers.get('content-type','') for t in ('text/html','application/xhtml+xml')):
             self.blackboard.add_finding(
                 VulnerabilityFinding(
                     id=f"VULN-CSP-MISSING-{endpoint.replace('/', '_')}",

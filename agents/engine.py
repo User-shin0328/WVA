@@ -6,29 +6,43 @@ from surface.recon import SurfaceReconEngine
 from agents.config_auditor import ConfigAndHeaderAuditor
 from agents.idor_auditor import IdorAndBolaAuditor
 from agents.chain_planner import ChainPlannerAgent
+from agents.injection_auditor import InjectionAuditor
+from agents.browser_auditor import BrowserAuditor
+from core.rules.contracts import ScanOptions, record
+from core.http.requester import RequestBudget
 
 class VulnerabilityAnalysisEngine:
     """
     Main Orchestrator for the Web Vulnerability & Attack Path Chaining Agent.
     Drives the pipeline: Surface Recon -> Specialized Auditors -> Chaining Planner -> Threat Graph.
     """
-    def __init__(self, target_url: str, event_callback: Optional[Callable[[str, Any], None]] = None, scope_mode: str = "path"):
+    def __init__(self, target_url: str, event_callback: Optional[Callable[[str, Any], None]] = None, scope_mode: str = "path", options=None):
         self.governance = SafetyGovernance(target_url, scope_mode=scope_mode)
         self.target_url = self.governance.target_base_url
         self.blackboard = SecurityBlackboard(self.target_url, event_callback=event_callback)
         self.blackboard.asset.metadata.update(scope_mode=scope_mode, scope_path=self.governance.scope_path or "/")
+        self.options=options if isinstance(options,ScanOptions) else ScanOptions(**(options or {}))
+        self.budget=RequestBudget(self.governance,self.options)
+        for profile in self.options.sessions:
+            for values in [profile.headers,profile.cookies,profile.login_fields]:
+                self.blackboard.private_values.update(v.get_secret_value() for v in values.values())
 
     async def execute_audit(self) -> SecurityBlackboard:
         self.blackboard.log(f"=== Starting Security Assessment against: {self.target_url} ===")
         
-        async def enforce_scope(request):
-            if not self.governance.is_in_scope(str(request.url)) or not self.governance.is_safe_endpoint(request.url.path):
-                raise ValueError("스코프 밖이거나 금지된 경로입니다.")
-            if request.method not in ("GET", "HEAD"):
-                raise ValueError("읽기 전용 진단만 허용됩니다.")
-
-        async with httpx.AsyncClient(verify=True, follow_redirects=False, trust_env=False,
-                                     event_hooks={"request": [enforce_scope]}) as client:
+        self.blackboard.asset.metadata['checks']=[]
+        auth={}
+        profile=None
+        if self.options.primary_session:
+            profile=next((s for s in self.options.sessions if s.alias==self.options.primary_session),None)
+            if profile is None:raise ValueError('기준 검사 세션 별칭을 찾을 수 없습니다.')
+            auth={'headers':{k:v.get_secret_value() for k,v in profile.headers.items()},'cookies':{k:v.get_secret_value() for k,v in profile.cookies.items()}}
+        async with self.budget.client(**auth) as client:
+            if profile and profile.login_url:
+                from agents.policy_auditor import post_form
+                self.budget.allow_post(profile.login_url)
+                logged_in=await post_form(client,profile.login_url,{k:v.get_secret_value() for k,v in profile.login_fields.items()})
+                if logged_in.status_code>=400:raise ValueError('기준 검사 세션의 로그인 요청이 거부됐습니다.')
             try:
                 probe = await client.get(self.target_url, timeout=5.0)
                 if probe.status_code >= 500:
@@ -44,11 +58,20 @@ class VulnerabilityAnalysisEngine:
             self.blackboard.log("[Phase 2] Configuration, Headers & Debug Info Audit")
             config_auditor = ConfigAndHeaderAuditor(self.blackboard, self.governance)
             await config_auditor.audit(client)
+            record(self.blackboard,'BASE','헤더·쿠키·CORS·정보 노출','FINDING' if self.blackboard.findings else 'PASS','실제로 측정한 응답에 대한 기존 규칙 결과입니다.',len(self.blackboard.asset.endpoints),len(self.blackboard.findings))
 
             # 3. Access Control & BOLA Auditor
             self.blackboard.log("[Phase 3] Access Control & BOLA Differential Audit")
             idor_auditor = IdorAndBolaAuditor(self.blackboard, self.governance)
             await idor_auditor.audit(client)
+            self.blackboard.log('[Phase 3] SQL 조건·입력 반사·브라우저 실행 대조')
+            injection=InjectionAuditor(self.blackboard,self.governance,self.options)
+            await injection.audit(client)
+            browser=BrowserAuditor(self.blackboard,self.governance,self.options,self.budget)
+            await browser.audit(client,injection.reflections)
+            # Optional declared policies are handled in isolated sessions.
+            from agents.policy_auditor import PolicyAuditor
+            await PolicyAuditor(self.blackboard,self.governance,self.options,self.budget).audit(client,browser)
 
             # 4. Strategic Vulnerability Chaining Planner & Attack Graph
             self.blackboard.log("[Phase 4] Vulnerability Chaining & Attack Path Analysis")
@@ -56,4 +79,5 @@ class VulnerabilityAnalysisEngine:
             await chain_planner.audit(client)
 
         self.blackboard.log(f"=== Security Assessment Complete. Total Findings: {len(self.blackboard.findings)}, Chains: {len(self.blackboard.chains)} ===")
+        self.blackboard.asset.metadata['request_budget']={'used':self.budget.count,'limit':self.options.max_requests,'max_response_bytes':self.options.max_response_bytes,'blocked':self.budget.blocked}
         return self.blackboard

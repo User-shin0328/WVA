@@ -1,0 +1,102 @@
+{
+  "sql": false,
+  "xss": false,
+  "browser": true,
+  "primary_session": "A",
+  "sessions": [
+    {
+      "alias": "A",
+      "login_url": "http://127.0.0.1:18913/login",
+      "login_fields": {
+        "username": "A",
+        "password": "local-only-A"
+      }
+    },
+    {
+      "alias": "B",
+      "login_url": "http://127.0.0.1:18913/login",
+      "login_fields": {
+        "username": "B",
+        "password": "local-only-B"
+      }
+    },
+    {
+      "alias": "admin",
+      "login_url": "http://127.0.0.1:18913/login",
+      "login_fields": {
+        "username": "admin",
+        "password": "local-only-admin"
+      }
+    }
+  ],
+  "access_cases": [
+    {
+      "url": "http://127.0.0.1:18913/object/vulnerable",
+      "owner": "A",
+      "denied": [
+        "B",
+        "anonymous"
+      ],
+      "protected_fields": [
+        "private_record"
+      ],
+      "kind": "object"
+    },
+    {
+      "url": "http://127.0.0.1:18913/object/safe",
+      "owner": "A",
+      "denied": [
+        "B",
+        "anonymous"
+      ],
+      "protected_fields": [
+        "private_record"
+      ],
+      "kind": "object"
+    },
+    {
+      "url": "http://127.0.0.1:18913/role/vulnerable",
+      "owner": "admin",
+      "denied": [
+        "B",
+        "anonymous"
+      ],
+      "protected_fields": [
+        "private_record"
+      ],
+      "kind": "role"
+    },
+    {
+      "url": "http://127.0.0.1:18913/role/safe",
+      "owner": "admin",
+      "denied": [
+        "B",
+        "anonymous"
+      ],
+      "protected_fields": [
+        "private_record"
+      ],
+      "kind": "role"
+    }
+  ],
+  "stored_cases": [
+    {
+      "write_url": "http://127.0.0.1:18913/stored/write",
+      "read_url": "http://127.0.0.1:18913/stored/read?record_id=wva-probe",
+      "cleanup_url": "http://127.0.0.1:18913/stored/cleanup",
+      "field": "message",
+      "fields": {
+        "record_id": "wva-probe"
+      }
+    }
+  ],
+  "timing_cases": [
+    {
+      "url": "http://127.0.0.1:18913/timing?id=1",
+      "parameter": "id",
+      "true_value": "(CASE WHEN 1=1 THEN wva_delay(0.3) ELSE 0 END)+1",
+      "false_value": "(CASE WHEN 1=2 THEN wva_delay(0.3) ELSE 0 END)+1",
+      "delay": 0.3
+    }
+  ]
+}

@@ -52,6 +52,22 @@ def consolidate():
             report.append(f"| {item['name']} | {item['status']} | {actual} |")
         if data.get("error"):
             report.append("\n실패 원인: "+data["error"])
+    benchmark = OUT / "benchmark" / "result.json"
+    if benchmark.exists():
+        data = json.loads(benchmark.read_text(encoding="utf-8"))
+        report += ["", "### 독립 취약 웹앱 벤치마크 (별도 수행 기록)", "",
+                   f"- 수행 시각: {data.get('at','기록 없음')}",
+                   f"- 상태: **{data.get('status','NOT_RUN')}**. 환경·재현·결과 수집 상태이며 SQLi·XSS 탐지 통과가 아닙니다.",
+                   f"- 독립 취약점·방어 대조 확인 {len(data.get('ground_truth',[]))}건, 소스/실행파일 진단 {len(data.get('measurements',[]))}건.",
+                   ("- SQLi·XSS 양성 4개와 방어 대조 2개를 소스·실행파일에서 비교했습니다. 전체 사이트 정확도로 일반화하지 않습니다." if data.get("status")=="PASS" else "- 이 기록의 미지원·오류를 탐지 통과로 합치지 않습니다. 이전 버전 결과는 수행 시각과 해시로 구분합니다."),
+                   "- 설치·재실행: [독립 실습 절차](benchmarks/README.md). 상세 결과·한계: [벤치마크 결과](benchmarks/RESULTS.md)."]
+        if data.get('error'):
+            report.append("- 실행 오류: "+data['error'])
+    extended = OUT / "benchmark" / "extended-result.json"
+    if extended.exists():
+        data=json.loads(extended.read_text(encoding="utf-8"))
+        report += ["", "### 계정·저장형·시간 기반 source/exe 검증", "",f"- 수행 시각: {data.get('at')}",f"- 결과: **{data['status']}**, 검증 {len(data.get('checks',[]))}건.","- 원본: `artifacts/benchmark/extended-result.json`. 자체 SQLite 실습 앱의 결과이며 제3자 앱 측정과 구분합니다."]
+        if data.get('error'):report.append('- 오류: '+data['error'])
     visual = OUT / "visual-final" / "report.json"
     if visual.exists():
         data = json.loads(visual.read_text(encoding="utf-8"))
@@ -74,7 +90,7 @@ def consolidate():
             for item in findings:
                 report.append(f"  - {item['severity']}: {item['name']}")
         report.append("- 실제 데스크톱·모바일 화면과 큰 상세 창, 저장 화면의 스크린샷을 직접 확인했습니다.")
-    report += ["", "### 화면 및 산출물", "", "- [데스크톱 화면](../docs/images/dashboard.png)","- 태블릿 화면: `artifacts/browser/results-768.png` (로컬 검증 산출물)","- 모바일 화면: `artifacts/browser/results-390.png` (로컬 검증 산출물)","- 경로 화면: `artifacts/browser/chains-desktop.png` (로컬 검증 산출물)","- [순서별 조치 화면](../docs/images/actions.png)","- 공격 표면: `artifacts/browser/surface-desktop.png` (로컬 검증 산출물)","- 로그 위치: `artifacts/browser/logs-desktop.png` (로컬 검증 산출물)","- 저장 화면: `artifacts/browser/save-desktop.png` (로컬 검증 산출물)","- 기능 검증 원본: `artifacts/pytest.xml`, `artifacts/pytest-output.txt`", "- 실행파일 검증 원본: `artifacts/executable-smoke.json`", "- 브라우저 검증 원본: `artifacts/browser/result.json`", "", "### 제한과 미실행 항목", "", "- Windows 10 x64 한 대에서 확인했습니다. 별도 Windows 11 PC·백신 제품별 실행은 NOT_RUN입니다.", "- 실제 외부 사이트, 로그인 세션을 가진 다중 사용자 권한 대조, 전체 URL 크롤링, 모든 OWASP 항목은 NOT_RUN입니다.", "- 진단 데이터는 세션 메모리에 있으며 완료 보고서와 개별 JSONL 진단 로그는 파일로 보존됩니다. 앱 재실행 시 화면 히스토리를 복원하지 않습니다.", "- 수집한 API 키와 식별자가 보고서에 포함될 수 있습니다. 테스트 값과 실제 진단 증거를 구분하여 관리합니다."]
+    report += ["", "### 화면 및 산출물", "", "- [데스크톱 화면](../docs/images/dashboard.png)","- 태블릿 화면: `artifacts/browser/results-768.png` (로컬 검증 산출물)","- 모바일 화면: `artifacts/browser/results-390.png` (로컬 검증 산출물)","- 경로 화면: `artifacts/browser/chains-desktop.png` (로컬 검증 산출물)","- [순서별 조치 화면](../docs/images/actions.png)","- 공격 표면: `artifacts/browser/surface-desktop.png` (로컬 검증 산출물)","- 로그 위치: `artifacts/browser/logs-desktop.png` (로컬 검증 산출물)","- 저장 화면: `artifacts/browser/save-desktop.png` (로컬 검증 산출물)","- 기능 검증 원본: `artifacts/pytest.xml`, `artifacts/pytest-output.txt`", "- 실행파일 검증 원본: `artifacts/executable-smoke.json`", "- 브라우저 검증 원본: `artifacts/browser/result.json`", "", "### 제한과 미실행 항목", "", "- Windows 10 x64 한 대에서 확인했습니다. 별도 Windows 11 PC·백신 제품별 실행은 NOT_RUN입니다.", "- 운영 사이트·운영 계정의 권한 대조, 포괄적인 전체 URL 탐색, 모든 OWASP 항목은 NOT_RUN입니다. 로컬 테스트 계정의 대조는 별도 확장 검증 기록을 따릅니다.", "- 진단 데이터는 세션 메모리에 있으며 완료 보고서와 개별 JSONL 진단 로그는 파일로 보존됩니다. 앱 재실행 시 화면 히스토리를 복원하지 않습니다.", "- 비밀 값은 가리지만 경로·식별자·관찰 증거는 남습니다. 공개된 실습 값과 운영 진단의 증거를 구분합니다."]
     text = "\n".join(report)
     (ROOT / "tests" / "TEST_RESULTS.md").write_text("# WVA 테스트 결과보고서\n\n"+text+"\n",encoding="utf-8")
     guide = ROOT / "tests" / "TEST_GUIDE.md"
