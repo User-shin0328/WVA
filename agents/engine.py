@@ -69,6 +69,11 @@ class VulnerabilityAnalysisEngine:
             await injection.audit(client)
             browser=BrowserAuditor(self.blackboard,self.governance,self.options,self.budget)
             await browser.audit(client,injection.reflections)
+            # System and server-level auditor (Path Traversal, Command Injection, SSRF, File Upload)
+            self.blackboard.log("[Phase 3] 경로 순회·명령어 삽입·SSRF·파일 업로드 검증")
+            from agents.system_auditor import SystemAuditor
+            system_auditor = SystemAuditor(self.blackboard, self.governance, self.options, self.budget)
+            await system_auditor.audit(client)
             # Optional declared policies are handled in isolated sessions.
             from agents.policy_auditor import PolicyAuditor
             await PolicyAuditor(self.blackboard,self.governance,self.options,self.budget).audit(client,browser)

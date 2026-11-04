@@ -45,6 +45,7 @@ class RequestBudget:
         self.governance,self.options=governance,options
         self.count=0
         self.post_urls=set()
+        self.delete_urls=set()
         self.lock=asyncio.Lock()
         self.last_request=0
         self.blocked=0
@@ -54,17 +55,25 @@ class RequestBudget:
             raise ValueError('명시한 작업이 진단 범위를 벗어났습니다.')
         self.post_urls.add(str(httpx.URL(url).copy_with(fragment='')))
 
+    def allow_delete(self, url):
+        if not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(urlsplit(url).path):
+            raise ValueError('명시한 작업이 진단 범위를 벗어났습니다.')
+        self.delete_urls.add(str(httpx.URL(url).copy_with(fragment='')))
+
     async def enforce(self, request):
         url=str(request.url.copy_with(fragment=''))
+        is_post = request.method == 'POST' and url in self.post_urls
+        is_delete = request.method == 'DELETE' and url in self.delete_urls
         if (not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(request.url.path)
-                or request.method not in ('GET','HEAD') and not (request.method=='POST' and url in self.post_urls)):
+                or request.method not in ('GET','HEAD') and not (is_post or is_delete)):
             self.blocked+=1
             raise ValueError('출처·경로·메서드 진단 경계에서 차단했습니다.')
         async with self.lock:
             if self.count>=self.options.max_requests:
                 raise ResourceLimit('전체 진단 요청 예산을 소진했습니다.')
             loop=asyncio.get_running_loop()
-            await asyncio.sleep(max(0,.025-(loop.time()-self.last_request)))
+            interval = .005 if getattr(self.options, 'mode', 'safe') == 'deep' else .025
+            await asyncio.sleep(max(0, interval - (loop.time() - self.last_request)))
             self.last_request=loop.time()
             self.count+=1
 

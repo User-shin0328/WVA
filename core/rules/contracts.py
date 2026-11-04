@@ -42,16 +42,19 @@ class TimingCase(BaseModel):
 
 
 class ScanOptions(BaseModel):
+    mode: Literal['safe', 'deep'] = 'safe'
     sql: bool = True
     xss: bool = True
     browser: bool = True
+    concurrency_check: bool = True
+    teardown_check: bool = True
     parameters: list[str] = Field(default_factory=list, max_length=10)
     sessions: list[SessionProfile] = Field(default_factory=list, max_length=4)
     primary_session: str | None = None
     access_cases: list[AccessCase] = Field(default_factory=list, max_length=12)
     stored_cases: list[StoredCase] = Field(default_factory=list, max_length=3)
     timing_cases: list[TimingCase] = Field(default_factory=list, max_length=3)
-    max_requests: int = Field(default=450, ge=40, le=1000)
+    max_requests: int = Field(default=450, ge=40, le=2000)
     max_response_bytes: int = Field(default=5_000_000, ge=64_000, le=10_000_000)
 
 

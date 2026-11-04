@@ -85,6 +85,7 @@ class ScanRequest(BaseModel):
     target_url: str = "http://127.0.0.1:8989"
     demo: bool = False
     scope_mode: Literal["path", "origin"] = "path"
+    mode: Literal["safe", "deep"] = "safe"
     consent: bool = True
     options: ScanOptions = Field(default_factory=ScanOptions)
 
@@ -112,6 +113,8 @@ class DashboardState:
         self.log_error = ""
         self.phase = 0
         self.scope_mode = "path"
+        self.mode = "safe"
+        self.options = None
 
 state = DashboardState()
 
@@ -220,7 +223,7 @@ async def health():
     return {"product": "WVA", "version": VERSION, "status": "ok"}
 
 @app.post("/api/scan/start")
-async def start_scan(req: ScanRequest):
+async def start_scan(req: ScanRequest, request: Request = None):
     if state.status == "running":
         raise HTTPException(409, "진단이 진행 중입니다. 완료하거나 중단한 뒤 다시 시작하세요.")
     if not req.consent and not req.demo:
@@ -241,10 +244,39 @@ async def start_scan(req: ScanRequest):
     state.started_at, state.finished_at = now(), None
     state.demo, state.report_paths = req.demo, []
     state.scope_mode = req.scope_mode
+    state.mode = req.mode
+    req.options.mode = req.mode
+    req.options.sql = True
+    req.options.browser = True
+    state.options = req.options
+    if req.mode == "deep":
+        req.options.max_requests = max(req.options.max_requests, 1000)
+    consent_log_dir = data_root() / "logs"
+    consent_log_dir.mkdir(parents=True, exist_ok=True)
+    consent_statement = (
+        "격리된 샌드박스/복제본 환경에서 수행되며 잠재적 부하 및 테스트 데이터 생성을 승인합니다 (정보통신망법 준수)."
+        if req.mode == "deep"
+        else "소유하거나 진단 권한을 득한 웹 대상에 대한 비파괴 안전 진단을 승인합니다."
+    )
+    consent_entry = {
+        "timestamp": now(),
+        "scan_id": scan_id,
+        "target_url": req.target_url if not req.demo else "local_demo",
+        "mode": req.mode,
+        "scope_mode": req.scope_mode,
+        "consent": True,
+        "statement": consent_statement,
+        "client_host": request.client.host if request and request.client else "127.0.0.1"
+    }
+    try:
+        with (consent_log_dir / "audit_consent.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(consent_entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
     state.target_url = req.target_url if not req.demo else "로컬 실습 환경 준비 중"
     event_callback("status", {"status": "running", "target_url": state.target_url})
     state.scan_task = asyncio.create_task(run_scan_worker(req.target_url, req.demo, req.scope_mode, req.options))
-    return {"status": "started", "target_url": state.target_url, "demo": req.demo, "scan_id": state.scan_id, "scope_mode": req.scope_mode}
+    return {"status": "started", "target_url": state.target_url, "demo": req.demo, "scan_id": state.scan_id, "scope_mode": req.scope_mode, "mode": state.mode}
 
 @app.post("/api/scan/stop")
 async def stop_scan():
@@ -286,7 +318,7 @@ async def get_status():
     score, grade = compute_score_and_grade(findings) if state.status == "completed" else (None, None)
     pending=pending_checks(checks)
     if pending and grade in ('A','B','C','D'):grade=None
-    return {"status": state.status, "target_url": state.target_url,
+    return {"status": state.status, "target_url": state.target_url, "mode": getattr(state, "mode", "safe"),
             "endpoints_count": len(bb.asset.endpoints) if bb else 0,
             "findings_count": len(findings), "chains_count": len(bb.chains) if bb else 0,
             "severity": severity, "score": score, "grade": grade, "checks":checks,"assessment_complete":bool(checks) and not pending,
@@ -296,6 +328,18 @@ async def get_status():
             "demo": state.demo, "report_paths": state.report_paths,
             "phase": state.phase, "scope_mode": state.scope_mode, "log_path": state.log_path, "log_error": state.log_error,
             "app_log_path": str(data_root() / "logs" / "WVA.log")}
+
+@app.get("/api/scan/consent_log")
+async def get_consent_log():
+    consent_log_path = data_root() / "logs" / "audit_consent.jsonl"
+    if not consent_log_path.exists():
+        return []
+    try:
+        lines = consent_log_path.read_text(encoding="utf-8").strip().splitlines()
+        records = [json.loads(line) for line in lines if line.strip()]
+        return records[-50:]
+    except Exception:
+        return []
 
 @app.get("/api/scan/diff")
 async def get_diff():

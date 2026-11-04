@@ -23,13 +23,7 @@
     <div class="title-row"><h1 id="page-title">웹 대상 진단</h1><button class="button secondary" id="go-save">정보 저장 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button></div>
     <section id="target-section" class="target-section" aria-label="진단 대상 설정">
       <form id="scan-form"><label for="target">진단할 URL</label><div class="target-row"><div class="target-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18"/></svg><input id="target" name="target" type="url" placeholder="http://127.0.0.1:8990/?page=1" autocomplete="url" spellcheck="false" required></div><button class="button primary" type="submit" id="start">진단 시작</button><button class="button secondary" type="button" id="stop" hidden>진단 중단</button></div></form>
-      <div class="target-tools"><label class="scope-choice" for="scope-mode">진단 범위<select id="scope-mode"><option value="path">입력 경로와 하위 경로</option><option value="origin">같은 서버 전체</option></select></label><label class="consent-choice" for="scan-consent"><input type="checkbox" id="scan-consent" checked><span>소유하거나 진단 허가를 받은 대상입니다</span></label><button class="text-button" id="demo">로컬 데모 실행</button></div>
-      <details class="scan-options"><summary>추가 진단 설정</summary><div class="scan-option-fields">
-        <label><input type="checkbox" id="option-sql" checked> SQL 조건 대조</label><label><input type="checkbox" id="option-browser" checked> 브라우저 XSS 실행 확인</label>
-        <label for="option-parameters">검사할 매개변수<input id="option-parameters" placeholder="자동 선택 · 직접 지정 시 쉼표로 구분" autocomplete="off"></label>
-        <label for="option-profile">계정·실습 검사 프로필<input type="file" id="option-profile" accept=".json,application/json"></label>
-        <button class="text-button" id="clear-profile" type="button">프로필 선택 해제</button><span class="muted">선택한 세션은 이번 진단 메모리에서만 사용합니다.</span>
-      </div></details>
+      <div class="target-tools"><div class="target-controls-group"><label class="scope-choice" for="scope-mode">진단 범위<select id="scope-mode"><option value="path">입력 경로와 하위 경로</option><option value="origin">같은 서버 전체</option></select></label><label class="scope-choice" for="scan-mode">진단 모드<select id="scan-mode"><option value="safe">운영 안전 모드</option><option value="deep">격리 샌드박스 모드</option></select></label></div><label class="consent-choice" for="scan-consent"><input type="checkbox" id="scan-consent" checked><span id="consent-label">소유하거나 진단 허가를 받은 대상입니다</span></label><button class="text-button" id="demo">로컬 데모 실행</button></div>
     </section>
     <div id="error" role="alert" class="error-message" hidden></div>
     <section id="scan-state" class="scan-state" data-state="idle" aria-label="진단 상태">
@@ -76,6 +70,7 @@
       <div class="context-line"><span>진단 대상</span><strong class="current-target">—</strong></div>
       <section class="panel storage-locations"><div class="panel-heading"><h2>로그 저장 위치</h2><span class="muted">UTF-8</span></div><dl><div><dt>현재 진단 로그 · JSONL</dt><dd id="scan-log-path">—</dd></div><div><dt>앱 실행·오류 로그</dt><dd id="app-log-path">—</dd></div></dl><p id="log-error" role="alert" hidden></p></section>
       <section class="panel"><div class="panel-heading"><h2>진단 로그</h2><span class="muted">최근 100줄 · 한국 시간</span></div><ol id="logs" class="logs"></ol><p id="logs-empty" class="empty-text">진단 로그 0줄</p></section>
+      <section class="panel"><div class="panel-heading"><h2>점검 권한 동의 감사 로그</h2><span class="muted">audit_consent.jsonl</span></div><ol id="consent-logs" class="logs"></ol><p id="consent-logs-empty" class="empty-text">동의 감사 로그 0줄</p></section>
     </section>
     <section id="save-view" class="view" hidden>
       <div class="context-line"><span>저장 대상</span><strong class="current-target">—</strong><span id="save-scan-id" class="mono"></span></div>

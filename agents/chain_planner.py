@@ -17,8 +17,8 @@ class ChainPlannerAgent(BaseAuditor):
         api_keys = self.blackboard.get_artifacts(LeakedArtifactType.API_KEY)
         
         # Test whether the harvested key unlocks privileged admin endpoints
-        admin_paths = self.governance.probe_paths(["/api/v1/admin/config", "/api/admin/config", "/api/v1/admin/status"])
-        admin_paths += [ep.path for ep in self.blackboard.asset.endpoints if ep.method == "GET" and ep.path.endswith(("/admin/config", "/admin/status"))]
+        admin_paths = self.governance.probe_paths(["/api/v1/admin/config", "/api/admin/config", "/api/v1/admin/status", "/api/v1/admin/system-config"])
+        admin_paths += [ep.path for ep in self.blackboard.asset.endpoints if ep.method == "GET" and ("/admin/" in ep.path or ep.path.endswith(("/admin/config", "/admin/status")))]
 
         for key_art in api_keys:
             headers = {"X-API-Key": key_art.value}
@@ -31,7 +31,7 @@ class ChainPlannerAgent(BaseAuditor):
 
                     if resp.status_code == 200:
                         data = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
-                        if not isinstance(data, dict) or data.get("privilege") not in ("ADMIN", "admin"):
+                        if not isinstance(data, dict) or data.get("privilege") not in ("ADMIN", "admin", "ROOT_ADMIN", "root_admin"):
                             continue
                         evidence = f"Harvested API Key '{key_art.value[:6]}...' successfully unlocked {path}. Admin status: 200 OK"
                         finding = VulnerabilityFinding(

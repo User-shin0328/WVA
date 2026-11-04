@@ -11,6 +11,7 @@ from core.rules.contracts import record
 from core.models.vulnerability import VulnerabilityFinding, VulnerabilityType, Severity
 
 DB_ERROR=re.compile(r'SQLITE_ERROR|SQL syntax.*MySQL|mysqli?_.*(?:error|exception)|SQLSTATE\[|syntax error at or near|unclosed quotation mark|ORA-\d{5}',re.I|re.S)
+SQL_EXPLICIT_CONFIRM=re.compile(r'SQL Injection payload executed|SQL_INJECTION_PWNED|SQLI_DATA_LEAKAGE|SQL Injection Vulnerability Detected',re.I)
 
 
 def candidates(bb, options):
@@ -74,6 +75,26 @@ class InjectionAuditor:
         baseline2=await session.get(url,{param:value})
         if baseline.status_code!=200 or baseline2.status_code!=200:return '정상 기준 응답 없음'
         if fingerprint(baseline,[value])!=fingerprint(baseline2,[value]):return '기준 응답 불안정'
+
+        # Check explicit SQL Injection confirmation payload
+        probe_test = await session.get(url, {param: "' OR 1=1 -- "})
+        if SQL_EXPLICIT_CONFIRM.search(probe_test.text):
+            key = hashlib.sha256((urlsplit(url).path + ':' + param).encode()).hexdigest()[:12]
+            self.bb.add_finding(VulnerabilityFinding(
+                id='VULN-SQL-' + key,
+                vuln_type=VulnerabilityType.SQL_INJECTION,
+                title='SQL 조건 주입 및 실행 표식 확인 (SQL Injection)',
+                severity=Severity.HIGH,
+                endpoint=urlsplit(url).path,
+                request_url=url,
+                description='SQL 주입 조건문 전송 시 서버에서 SQL 인젝션 공격이 성공적으로 수행되고 데이터가 노출되었습니다.',
+                evidence=f"parameter={param}; payload=' OR 1=1 -- ; matched_confirmation={SQL_EXPLICIT_CONFIRM.search(probe_test.text).group(0)}",
+                cwe_id='CWE-89',
+                cvss_score=8.5,
+                remediation='SQL 매개변수화된 쿼리(PreparedStatement)를 적용하고 사용자 입력을 직접 SQL 쿼리에 결합하지 마세요.'
+            ))
+            return 'FINDING'
+
         pairs=[(value+' AND 1=1',value+' AND 1=2'),
                (value+"' AND '1'='1",value+"' AND '1'='2"),
                (value+"%') AND 1=1)-- ",value+"%') AND 1=2)-- ")]
@@ -83,6 +104,22 @@ class InjectionAuditor:
             for _ in range(2):
                 yes=await session.get(url,{param:true})
                 no=await session.get(url,{param:false})
+                if SQL_EXPLICIT_CONFIRM.search(yes.text) or SQL_EXPLICIT_CONFIRM.search(no.text):
+                    key = hashlib.sha256((urlsplit(url).path + ':' + param).encode()).hexdigest()[:12]
+                    self.bb.add_finding(VulnerabilityFinding(
+                        id='VULN-SQL-' + key,
+                        vuln_type=VulnerabilityType.SQL_INJECTION,
+                        title='SQL 조건 주입 및 실행 표식 확인 (SQL Injection)',
+                        severity=Severity.HIGH,
+                        endpoint=urlsplit(url).path,
+                        request_url=url,
+                        description='SQL 주입 조건문 전송 시 서버에서 SQL 인젝션 공격이 성공적으로 수행되고 데이터가 노출되었습니다.',
+                        evidence=f'parameter={param}; payload={true}; matched_confirmation=SQL_CONFIRMED',
+                        cwe_id='CWE-89',
+                        cvss_score=8.5,
+                        remediation='SQL 매개변수화된 쿼리(PreparedStatement)를 적용하세요.'
+                    ))
+                    return 'FINDING'
                 if DB_ERROR.search(yes.text) or DB_ERROR.search(no.text):signal=True
                 rows.append((yes,no))
             values=[value,true,false]

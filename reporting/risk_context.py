@@ -96,6 +96,58 @@ PROFILES.update({
 })
 
 
+
+PROFILES.update({
+    'PATH_TRAVERSAL': {
+        'summary': '디렉터리 순회 입력을 통해 서버 내부 시스템 파일이 노출되었습니다.',
+        'observation': '상대 경로(../) 삽입 요청에서 시스템 설정 파일(/etc/passwd, win.ini 등)의 실제 내용이 반환되었습니다.',
+        'assessment': '시스템 파일 열람 확인',
+        'attacks': [{
+            'name': '서버 설정 파일 및 자격증명 열람',
+            'scenario': '공격자가 서버 파일 시스템의 환경변수, 소스코드, 데이터베이스 연결 정보, 비밀키를 직접 열람할 수 있습니다.',
+            'conditions': ['웹 프로세스에 해당 파일 읽기 권한이 있어야 합니다.', '입력 경로 정규화 및 상위 디렉터리 이동 필터링이 누락되어야 합니다.']
+        }],
+        'limits': ['확인된 동작은 파일 읽기 응답입니다. 시스템 파일 쓰기나 삭제는 수행하지 않았습니다.'],
+        'references': [{'title': 'OWASP Path Traversal', 'url': OWASP + 'Path_Traversal_Cheat_Sheet.html'}]
+    },
+    'COMMAND_INJECTION': {
+        'summary': '사용자 입력이 서버 측 운영체제 명령어 실행 경로로 직접 전달되었습니다.',
+        'observation': '명령어 구분자(; | &) 결합 시 whoami 등 시스템 명령 실행 결과가 응답에 반환되었습니다.',
+        'assessment': '원격 시스템 명령 실행 확인',
+        'attacks': [{
+            'name': '서버 운영체제 권한 장악 (RCE)',
+            'scenario': '원격 공격자가 웹 서버 권한으로 임의의 시스템 명령을 실행하여 서버를 완전 장악하거나 내부망으로 침투할 수 있습니다.',
+            'conditions': ['시스템 쉘 호출 함수(system, exec 등)가 입력을 적절히 정화하지 않고 실행해야 합니다.', '웹 서버 프로세스의 시스템 권한에 따라 실행 범위가 결정됩니다.']
+        }],
+        'limits': ['whoami 등 비파괴 식별 명령의 출력만 관찰했습니다. 파괴적 명령(rm, drop, kill 등)은 일절 수행하지 않았습니다.'],
+        'references': [{'title': 'OWASP Command Injection Prevention', 'url': OWASP + 'OS_Command_Injection_Defense_Cheat_Sheet.html'}]
+    },
+    'SSRF': {
+        'summary': '서버가 내부망 또는 클라우드 메타데이터 IP로 위조된 HTTP 요청을 대신 전송했습니다.',
+        'observation': '169.254.169.254 등 사설 IP 요청 시 클라우드 인스턴스 메타데이터 또는 내부 서비스 응답이 반환되었습니다.',
+        'assessment': '서버 측 요청 위조 확인',
+        'attacks': [{
+            'name': '내부 클라우드 자격증명 탈취 및 비공개 내부망 스캔',
+            'scenario': '외부에서 접근할 수 없는 내부 인프라, 관리 포털, 클라우드 IAM 임시 자격증명(AccessKeyId)을 서버 권한으로 탈취할 수 있습니다.',
+            'conditions': ['서버가 사용자가 지정한 임의 URL로 아웃바운드 연결을 시도해야 합니다.', '내부망 방화벽 또는 사설 IP 필터링이 부재해야 합니다.']
+        }],
+        'limits': ['공개 메타데이터 응답 확인 수준이며 2차 클라우드 API 호출이나 권한 행사는 수행하지 않았습니다.'],
+        'references': [{'title': 'OWASP Server-Side Request Forgery Prevention', 'url': OWASP + 'Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html'}]
+    },
+    'ARBITRARY_FILE_UPLOAD': {
+        'summary': '서버 측에서 실행 가능한 위험 확장자 스크립트 파일의 업로드가 허용되었습니다.',
+        'observation': '.php 확장자의 테스트 파일이 거부 없이 업로드되고 저장 경로가 응답에 반환되었습니다.',
+        'assessment': '위험 확장자 파일 업로드 확인',
+        'attacks': [{
+            'name': '웹쉘(WebShell) 업로드를 통한 원격 코드 실행',
+            'scenario': '공격자가 웹쉘 스크립트를 업로드한 후 웹 브라우저로 해당 파일 경로에 접근하여 서버 제어권을 획득할 수 있습니다.',
+            'conditions': ['업로드된 파일이 웹 루트(Web Root) 아래 저장되어 직접 실행/호출 가능해야 합니다.', '파일 확장자 검증 및 실행 권한 제어가 누락되어야 합니다.']
+        }],
+        'limits': ['무해한 텍스트 주석 파일로 확장자 허용 여부만 검증했습니다. 악성 웹쉘 코드를 업로드하거나 실행하지 않았습니다.'],
+        'references': [{'title': 'OWASP File Upload Cheat Sheet', 'url': OWASP + 'File_Upload_Cheat_Sheet.html'}]
+    }
+})
+
 def risk_context(data, rule_key):
     profile = PROFILES.get(rule_key)
     if profile:

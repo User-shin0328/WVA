@@ -2,13 +2,13 @@
 const $ = id => document.getElementById(id);
 const severityNames = {CRITICAL:'심각',HIGH:'높음',MEDIUM:'중간',LOW:'낮음',INFO:'정보'};
 const severityRank = {CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
-const typeNames = {MISSING_SECURITY_HEADER:'보안 헤더 누락',EXPOSED_DEBUG_ENDPOINT:'디버그 정보 노출',INFO_DISCLOSURE:'민감 정보 노출',BOLA_IDOR:'객체 접근 통제 누락',PRIVILEGE_ESCALATION:'유출 키로 관리자 응답 접근',CORS_MISCONFIGURATION:'외부 출처 접근 허용',COOKIE_SECURITY_FLAG:'쿠키 보안 속성 누락',AUTH_BYPASS:'인증 우회',PARAMETER_REFLECTION:'입력값 반사',SECRET_LEAK:'클라이언트 스크립트 시크릿 노출',TLS_EXPIRING:'SSL/TLS 인증서 만료 임박'};
+const typeNames = {MISSING_SECURITY_HEADER:'보안 헤더 누락',EXPOSED_DEBUG_ENDPOINT:'디버그 정보 노출',INFO_DISCLOSURE:'민감 정보 노출',BOLA_IDOR:'객체 접근 통제 누락',PRIVILEGE_ESCALATION:'유출 키로 관리자 응답 접근',CORS_MISCONFIGURATION:'외부 출처 접근 허용',COOKIE_SECURITY_FLAG:'쿠키 보안 속성 누락',AUTH_BYPASS:'인증 우회',PARAMETER_REFLECTION:'입력값 반사',SECRET_LEAK:'클라이언트 스크립트 시크릿 노출',TLS_EXPIRING:'SSL/TLS 인증서 만료 임박',PATH_TRAVERSAL:'경로 조작 및 시스템 파일 접근 (Path Traversal / LFI)',COMMAND_INJECTION:'OS 시스템 명령어 삽입 (Command Injection / RCE)',SSRF:'서버 측 요청 위조 (SSRF)',ARBITRARY_FILE_UPLOAD:'위험 확장자 파일 무제한 업로드 (Arbitrary File Upload)',SQL_INJECTION:'SQL 주입 (SQL Injection)'};
 const statusNames = {idle:'진단 대기',running:'진단 중',completed:'진단 완료',stopped:'진단 중단 · 부분 결과',error:'진단 실패'};
 const views = {overview:'웹 대상 진단',chains:'취약점 연계 경로',endpoints:'공격 표면',logs:'진단 로그',save:'정보 저장'};
 const exportNames = {summary:'진단 요약',findings:'발견 항목',chains:'연계 경로',endpoints:'공격 표면',logs:'진단 로그'};
 const phases = ['연결','표면 탐색','설정 점검','접근 제어','경로 분석'];
 const sources = {surface_discovery:'경로 탐색',link_parser:'HTML 링크',form_parser:'HTML 폼',openapi:'API 문서',script_parser:'스크립트'};
-let snapshot=null,findings=[],chains=[],endpoints=[],logs=[],surface={},diffData=null,selected=null;
+let snapshot=null,findings=[],chains=[],endpoints=[],logs=[],consentLogs=[],surface={},diffData=null,selected=null;
 let renderKey='',refreshing=false,starting=false,stopping=false,shuttingDown=false,exporting=false,activeView='overview';
 
 function el(tag,className,text){const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;}
@@ -32,7 +32,7 @@ function renderStatus(){
   const s=snapshot;if(!s)return;const running=s.status==='running'||starting;
   const displayState=running?'running':s.status;
   if($('scan-state').dataset.state!==displayState)$('scan-state').dataset.state=displayState;
-  $('status').textContent=running?'진단 중':statusNames[s.status]||s.status;$('scope').textContent=s.target_url?(s.demo?'로컬 데모 · ':'')+s.target_url:'—';$('elapsed').textContent=duration();
+  $('status').textContent=running?'진단 중':statusNames[s.status]||s.status;$('scope').textContent=s.target_url?(s.demo?'로컬 데모 · ':s.mode==='deep'?'[격리 샌드박스] ':'')+s.target_url:'—';$('elapsed').textContent=duration();
   $('count-findings').textContent=s.findings_count.toLocaleString();$('count-chains').textContent=s.chains_count.toLocaleString();$('count-endpoints').textContent=s.endpoints_count.toLocaleString();
   const gradeEl=$('security-grade');
   if(gradeEl){
@@ -48,8 +48,8 @@ function renderStatus(){
   }
   const scoreEl=$('security-score');
   if(scoreEl)scoreEl.textContent=!running&&s.status==='completed'&&Number.isFinite(s.score)?(s.score+'점'):'—';
-  for(const button of document.querySelectorAll('.finding-name,.chain-step'))button.disabled=running;renderChecks();for(const input of document.querySelectorAll('.scan-option-fields input,.scan-option-fields button'))input.disabled=running;
-  $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('scope-mode').disabled=running;$('demo').disabled=running;$('stop').hidden=!running;$('stop').disabled=starting||stopping;
+  for(const button of document.querySelectorAll('.finding-name,.chain-step'))button.disabled=running;renderChecks();
+  $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('scope-mode').disabled=running;if($('scan-mode'))$('scan-mode').disabled=running;$('demo').disabled=running;$('stop').hidden=!running;$('stop').disabled=starting||stopping;
   $('scan-phases').hidden=!running;
   const phase=starting?0:(s.phase||0);$('scan-phases').replaceChildren(...phases.map((name,index)=>{const item=el('li',index<phase?'done':index===phase&&running?'current':'',name);if(index===phase&&running)item.setAttribute('aria-current','step');return item;}));
   for(const n of document.querySelectorAll('.current-target'))n.textContent=s.target_url||'—';
@@ -62,7 +62,7 @@ function renderChecks(){
   $('checks-body').replaceChildren(...rows.map(r=>{const tr=el('tr');tr.append(el('td','',r.title),el('td',r.status==='FINDING'?'severity HIGH':'',(checkNames[r.status]||r.status)+(r.errors?' · 일부 미완료':'')),el('td','numeric',String(r.tested)),el('td','check-reason',r.reason));return tr;}));
   $('assessment-note').hidden=snapshot?.status!=='completed';$('assessment-note').textContent=snapshot?.assessment_note||'';
 }
-$('clear-profile').addEventListener('click',()=>{$('option-profile').value='';});
+if($('clear-profile'))$('clear-profile').addEventListener('click',()=>{$('option-profile').value='';});
 function svg(tag,attributes={},text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attributes))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;return n;}
 function pieChart(host,entries,title){
   const width=Math.max(290,Math.round(host.getBoundingClientRect().width)-32),stacked=width<440;
@@ -164,7 +164,21 @@ function renderEndpoints(){
   const measured=list.filter(ep=>ep.status_code!==null);
   $('headers-body').replaceChildren(...measured.map(ep=>{const row=el('tr');row.append(el('td','endpoint',ep.path));for(const key of ['content-security-policy','strict-transport-security','x-content-type-options','x-frame-options','access-control-allow-origin']){let value=ep.headers[key]||'—';if(key==='strict-transport-security'&&ep.url.startsWith('http:'))value='HTTP 대상';if(key==='x-frame-options'&&!ep.headers[key]&&ep.headers['content-security-policy']?.includes('frame-ancestors'))value='CSP frame-ancestors';const cell=el('td',value==='—'?'header-absent':'header-present',value);cell.title=value;row.append(cell);}return row;}));
 }
-function renderLogs(){$('logs').replaceChildren(...logs.slice(-100).reverse().map(event=>{const row=el('li');row.append(el('time','',timeLabel(event.timestamp)),el('span','',event.data));return row;}));$('logs-empty').hidden=logs.length>0;}
+function renderLogs(){
+  $('logs').replaceChildren(...logs.slice(-100).reverse().map(event=>{const row=el('li');row.append(el('time','',timeLabel(event.timestamp)),el('span','',event.data));return row;}));
+  $('logs-empty').hidden=logs.length>0;
+  if($('consent-logs')){
+    const clogs=consentLogs||[];
+    $('consent-logs').replaceChildren(...clogs.slice(-50).reverse().map(entry=>{
+      const row=el('li');
+      const modeTag=entry.mode==='deep'?'[격리 샌드박스]':'[운영 안전]';
+      const text=`${modeTag} ${entry.target_url} · ${entry.statement||'동의 완료'} (${entry.scan_id||''})`;
+      row.append(el('time','',timeLabel(entry.timestamp)),el('span','',text));
+      return row;
+    }));
+    if($('consent-logs-empty'))$('consent-logs-empty').hidden=clogs.length>0;
+  }
+}
 function initExport(){for(const [key,title]of Object.entries(exportNames)){const label=el('label');const input=el('input');input.type='checkbox';input.name='sections';input.value=key;input.checked=true;const count=el('small');count.id='export-count-'+key;label.append(input,el('span','',title),count);$('export-sections').append(label);}for(const input of $('export-form').querySelectorAll('input'))input.addEventListener('change',updateExport);}
 function updateExport(){
   const chosen=[...$('export-sections').querySelectorAll('input:checked')];const format=$('export-form').querySelector('input[name="format"]:checked')?.value||'json';
@@ -199,10 +213,10 @@ async function updateDiff(){
 async function refresh(force=false){
   if(refreshing||shuttingDown)return;refreshing=true;
   try{
-    const s=await api('/api/scan/status');if(!snapshot&&s.scan_id){$('scope-mode').value=s.scope_mode||'path';if(!s.demo)$('target').value=s.target_url;}const key=[s.scan_id,s.status,s.findings_count,s.chains_count,s.endpoints_count].join('|');const changed=force||key!==renderKey;snapshot=s;
+    const s=await api('/api/scan/status');if(!snapshot&&s.scan_id){$('scope-mode').value=s.scope_mode||'path';if($('scan-mode')&&s.mode)$('scan-mode').value=s.mode;if(!s.demo)$('target').value=s.target_url;}const key=[s.scan_id,s.status,s.findings_count,s.chains_count,s.endpoints_count].join('|');const changed=force||key!==renderKey;snapshot=s;
     if(changed||s.status==='running'){
-      const data=await Promise.all(['/api/scan/findings','/api/scan/chains','/api/scan/endpoints','/api/scan/logs','/api/scan/surface'].map(p=>api(p)));
-      [findings,chains,endpoints,logs,surface]=data;findings.sort((a,b)=>severityRank[a.severity]-severityRank[b.severity]);
+      const data=await Promise.all(['/api/scan/findings','/api/scan/chains','/api/scan/endpoints','/api/scan/logs','/api/scan/surface','/api/scan/consent_log'].map(p=>api(p)));
+      [findings,chains,endpoints,logs,surface,consentLogs]=data;findings.sort((a,b)=>severityRank[a.severity]-severityRank[b.severity]);
       if(s.status==='completed'){
         await updateDiff();
       }else{
@@ -221,16 +235,16 @@ async function start(demo=false){
     return;
   }
   starting=true;error('');if($('finding-dialog').open)$('finding-dialog').close();
-  $('start').disabled=true;$('demo').disabled=true;$('scope-mode').disabled=true;$('scan-state').dataset.state='running';$('status').textContent='진단 중';if(snapshot)renderStatus();
+  $('start').disabled=true;$('demo').disabled=true;$('scope-mode').disabled=true;if($('scan-mode'))$('scan-mode').disabled=true;$('scan-state').dataset.state='running';$('status').textContent='진단 중';if(snapshot)renderStatus();
   try{
     const target=demo?'http://127.0.0.1:8989':$('target').value.trim();
-    const scopeMode=demo?'path':$('scope-mode').value;
+    const scopeMode=demo?'path':$('scope-mode').value;const mode=demo?'safe':($('scan-mode')?.value||'safe');
     const consent=demo?true:Boolean($('scan-consent')?.checked);
-    let options={};const file=$('option-profile').files[0];if(file){if(file.size>128000)throw new Error('검사 프로필은 128KB 이하로 선택하세요.');try{options=JSON.parse(await file.text());}catch(_){throw new Error('검사 프로필 JSON 형식을 확인하세요.');}}options={...options,sql:$('option-sql').checked,browser:$('option-browser').checked};if($('option-parameters').value.trim())options.parameters=$('option-parameters').value.split(',').map(v=>v.trim()).filter(Boolean);const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode,consent,options});
+    const options={sql:true,browser:true};const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode,mode,consent,options});
     selected=null;findings=[];chains=[];endpoints=[];logs=[];surface={};diffData=null;renderKey='';$('save-result').textContent='진단 완료 후 저장 가능';
     if($('diff-banner'))$('diff-banner').hidden=true;
-    snapshot={...snapshot,status:'running',scan_id:result.scan_id,target_url:result.target_url,scope_mode:result.scope_mode,demo,findings_count:0,chains_count:0,endpoints_count:0,phase:0,started_at:new Date().toISOString(),finished_at:null,error:'',log_path:''};renderStatus();renderAll();await refresh(true);
-  }catch(exc){error(exc.message);}finally{starting=false;if(snapshot)renderStatus();else{$('start').disabled=false;$('demo').disabled=false;$('scope-mode').disabled=false;$('scan-phases').hidden=true;$('scan-state').dataset.state='idle';$('status').textContent='진단 대기';}}
+    snapshot={...snapshot,status:'running',scan_id:result.scan_id,target_url:result.target_url,scope_mode:result.scope_mode,mode:result.mode||mode,demo,findings_count:0,chains_count:0,endpoints_count:0,phase:0,started_at:new Date().toISOString(),finished_at:null,error:'',log_path:''};renderStatus();renderAll();await refresh(true);
+  }catch(exc){error(exc.message);}finally{starting=false;if(snapshot)renderStatus();else{$('start').disabled=false;$('demo').disabled=false;$('scope-mode').disabled=false;if($('scan-mode'))$('scan-mode').disabled=false;$('scan-phases').hidden=true;$('scan-state').dataset.state='idle';$('status').textContent='진단 대기';}}
 }
 async function saveSelected(event){
   event.preventDefault();if(exporting)return;const sections=[...$('export-sections').querySelectorAll('input:checked')].map(n=>n.value);if(!sections.length)return;
@@ -250,4 +264,6 @@ $('finding-dialog').addEventListener('click',event=>{if(event.target===$('findin
 $('export-form').addEventListener('submit',saveSelected);
 $('shutdown').addEventListener('click',async()=>{try{await post('/api/app/shutdown');shuttingDown=true;$('status').textContent='앱 종료';for(const b of document.querySelectorAll('button'))b.disabled=true;}catch(exc){error(exc.message);}});
 window.addEventListener('hashchange',()=>setView(location.hash.slice(1),false));let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(renderCharts,100);});
+function updateConsentLabel(){const mode=$('scan-mode')?.value||'safe';const lbl=$('consent-label');if(!lbl)return;if(mode==='deep')lbl.textContent='격리된 샌드박스 환경이며 테스트 데이터 생성 및 동시성 진단을 승인합니다';else lbl.textContent='소유하거나 진단 허가를 받은 대상입니다 (비파괴 안전 점검)';}
+$('scan-mode')?.addEventListener('change',updateConsentLabel);updateConsentLabel();
 initExport();setView(location.hash.slice(1)||'overview',false);refresh(true);setInterval(()=>refresh(),700);setInterval(()=>{if(snapshot)$('elapsed').textContent=duration();},500);

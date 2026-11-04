@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import httpx
 from agents.base import BaseAuditor
 from core.models.vulnerability import VulnerabilityFinding, VulnerabilityType, Severity
-from core.models.state import LeakedArtifactType
+from core.models.state import LeakedArtifactType, LeakedArtifact
 
 class ConfigAndHeaderAuditor(BaseAuditor):
     """
@@ -161,7 +161,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
             if isinstance(data, dict):
                 for k, v in data.items():
                     k_lower = k.lower()
-                    if "user_id" in k_lower or "userid" in k_lower or "staging_user" in k_lower:
+                    if "user_id" in k_lower or "userid" in k_lower or "staging" in k_lower or "admin_user" in k_lower:
                         evidence_items.append(f"{k}: {v}")
                         leaked_artifact = {
                             "type": LeakedArtifactType.USER_ID.value,
@@ -170,11 +170,12 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                         }
                     elif "api_key" in k_lower or "token" in k_lower or "secret" in k_lower:
                         evidence_items.append(f"{k}: [REDACTED]")
-                        leaked_artifact = {
-                            "type": LeakedArtifactType.API_KEY.value,
-                            "key": k,
-                            "value": str(v)
-                        }
+                        if not leaked_artifact:
+                            leaked_artifact = {
+                                "type": LeakedArtifactType.API_KEY.value,
+                                "key": k,
+                                "value": str(v)
+                            }
 
             if evidence_items:
                 evidence_str = "; ".join(evidence_items)

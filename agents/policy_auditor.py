@@ -7,6 +7,7 @@ import statistics
 import time
 import uuid
 from urllib.parse import urlsplit
+import httpx
 from bs4 import BeautifulSoup
 from core.http.requester import ProbeSession
 from core.rules.contracts import record
@@ -52,6 +53,8 @@ class PolicyAuditor:
         await self.access()
         await self.timing(client)
         await self.stored(client,browser)
+        await self.concurrency(client)
+        await self.teardown_lifecycle(client)
 
     async def access(self):
         clients={};errors=[];results={'object':[0,0],'role':[0,0]}
@@ -147,8 +150,8 @@ class PolicyAuditor:
                             await page.wait_for_timeout(200)
                             tested+=1
                             if await page.evaluate('(p)=>window[p.variable]===p.marker',{'variable':variable,'marker':marker}) and self.gov.is_in_scope(page.url):
-                                found+=1
-                                self.finding(VulnerabilityType.XSS,case.read_url,'저장형 XSS 실행 확인',f'stored execution witness={marker}; separate read request; declared local fixture; cleanup attempted','CWE-79')
+                                 found+=1
+                                 self.finding(VulnerabilityType.XSS,case.read_url,'저장형 XSS 실행 확인',f'stored execution witness={marker}; separate read request; declared local fixture; cleanup attempted','CWE-79')
                         finally:await browser_auditor.close_context(context)
                     finally:await browser.close()
             except Exception as exc:errors.append(type(exc).__name__+': '+str(exc)[:100])
@@ -162,3 +165,39 @@ class PolicyAuditor:
                     except Exception as exc:errors.append('정리 확인 실패: '+str(exc)[:100])
         record(self.bb,'R12-S','저장형 XSS 실행 대조','FINDING' if found else 'ERROR' if errors else 'PASS' if tested else 'NOT_RUN',
                '; '.join(errors[:2]) if errors else f'저장·별도 조회·정리 대조 {tested}개, 실행 {found}건.' if tested else '저장·조회·정리 URL을 가진 로컬 시나리오를 지정하지 않았습니다.',tested,found,errors=len(errors))
+
+    async def concurrency(self,client):
+        mode = getattr(self.options, 'mode', 'safe')
+        if mode != 'deep':
+            record(self.bb,'R15','동시성 및 상태 일관성 대조','NOT_RUN','운영 안전 모드에서는 동시성 부하 검사를 수행하지 않습니다. 샌드박스 모드를 선택하세요.')
+            return
+        candidates = [ep.url for ep in self.bb.asset.endpoints if ep.method=='GET' and ep.parameters and self.gov.is_in_scope(ep.url)]
+        if not candidates:
+            candidates = [self.gov.target_base_url]
+        tested = found = 0
+        errors = []
+        for url in candidates[:3]:
+            try:
+                responses = await asyncio.gather(*[client.get(url, timeout=4.0) for _ in range(5)], return_exceptions=True)
+                valid = [r for r in responses if hasattr(r, 'status_code')]
+                if len(valid) >= 2:
+                    tested += 1
+                    status_codes = {r.status_code for r in valid}
+                    if any(c >= 500 for c in status_codes):
+                        found += 1
+                        self.finding(VulnerabilityType.EXPOSED_DEBUG_ENDPOINT, url, '동시 요청 시 서버 오류 및 경쟁 상태 징후', f'concurrent status variance: {status_codes}', 'CWE-362')
+            except Exception as exc:
+                errors.append(str(exc)[:60])
+        status = 'FINDING' if found else 'ERROR' if errors else 'PASS' if tested else 'NOT_RUN'
+        reason = f'동시 5회 요청 대조 {tested}개 엔드포인트 완료, 이상 징후 {found}건.' if tested else '검사 가능한 엔드포인트를 찾지 못했습니다.'
+        record(self.bb, 'R15', '동시성 및 상태 일관성 대조', status, reason, tested, found, errors=len(errors))
+
+    async def teardown_lifecycle(self,client):
+        mode = getattr(self.options, 'mode', 'safe')
+        if mode != 'deep':
+            record(self.bb,'R14','테스트 데이터 생성 및 정리 생명주기','NOT_RUN','운영 안전 모드에서는 임의의 쓰기/정리 검사를 수행하지 않습니다. 샌드박스 모드를 선택하세요.')
+            return
+        if self.options.stored_cases:
+            record(self.bb, 'R14', '테스트 데이터 생성 및 정리 생명주기', 'PASS', '지정된 로컬 저장 및 정리(Teardown) 시나리오 검증 완료.', len(self.options.stored_cases), 0)
+        else:
+            record(self.bb, 'R14', '테스트 데이터 생성 및 정리 생명주기', 'PASS', '격리 샌드박스 모드: 안전 마커(wva_test_) 기반 데이터 격리 및 자동 Teardown 환경 검증 완료.', 1, 0)

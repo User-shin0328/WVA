@@ -17,8 +17,8 @@ class IdorAndBolaAuditor(BaseAuditor):
         candidate_ids.extend(parse_qs(urlsplit(self.blackboard.target_url).query).get("user_id", []))
         for art in self.blackboard.get_artifacts(LeakedArtifactType.USER_ID):
             candidate_ids.append(art.value)
-        if not candidate_ids:
-            candidate_ids.extend(["1001", "usr_staging_99"])
+        candidate_ids.extend(["usr_staging_99", "admin", "1001", "0"])
+        candidate_ids = list(dict.fromkeys(candidate_ids))
 
         # Target endpoints known or discovered for user profiles/objects
         target_paths = self.governance.probe_paths(["/api/v1/user/profile", "/api/user/profile", "/api/v1/user/export"])
@@ -82,7 +82,8 @@ class IdorAndBolaAuditor(BaseAuditor):
                             remediation="Implement server-side session-to-object ownership validation on every data access query."
                         )
                         self.blackboard.add_finding(finding)
-                        break
+                        if leaked_key:
+                            break
 
                 except Exception:
                     continue
