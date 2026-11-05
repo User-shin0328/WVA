@@ -3,12 +3,14 @@
 > **지능형 웹 취약점 진단 및 다단계 공격 체인 분석 에이전트**
 > (Web Vulnerability Auditor & Attack Path Chaining Agent)
 
-[![Version](https://img.shields.io/badge/version-v2.6.0-blue.svg)](docs/BUILD_INFO.json)
+[![Version](https://img.shields.io/badge/version-v2.7.0-blue.svg)](docs/BUILD_INFO.json)
 [![Tests](https://img.shields.io/badge/tests-180%2F180%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
 [![Smoke Test](https://img.shields.io/badge/smoke%20test-27%2F27%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg)](WVA.exe)
 
 ![WVA 진단 화면](docs/images/dashboard.png)
+
+2.7 변경: 발견 기준 참고 등급과 검사 완료 여부 분리, 재진단 비교 근거 표시, 대표 SQL 매개변수 대조, 미인증 설정·Git·관리 환경 노출 검사, 확대 가능한 체인 그래프. 계정 프로필은 로그인 검사에만 선택합니다. [변경 내용·재현 절차·한계](docs/WORKFLOW_UPGRADE_2.7.md).
 
 화면은 제공된 로컬 실습 대상을 진단한 결과입니다. 현재 검증된 Windows 실행파일 `WVA.exe`를 저장소에 포함하며, 빌드 해시와 테스트 기록은 `docs/BUILD_INFO.json` 및 `tests/TEST_GUIDE.md`에서 확인할 수 있습니다.
 

@@ -37,7 +37,7 @@ def consolidate():
               f"- 기능 테스트: **{passed}/{len(rows)} PASS**", "- 외부 운영 사이트 진단은 수행하지 않았습니다. 로컬 실습 환경에 대한 검증입니다.", "",
               "### 기능 테스트 상세 결과", "", "| 실제 테스트 | 결과 | 소요 |", "| --- | --- | ---: |"]
     report += [f"| `{name}` | {status} | {duration} |" for name,status,duration in rows]
-    for title,file in [("실행파일 독립 실행 결과",OUT / "executable-smoke.json"),("브라우저 작업 흐름 결과",OUT / "browser" / "result.json")]:
+    for title,file in [("실행파일 독립 실행 결과",OUT / "executable-smoke.json"),("브라우저 작업 흐름 결과",OUT / "browser" / "result.json"),("2.7 진단·재검증·확대 그래프 작업 흐름",OUT / "upgrade-2.7" / "browser" / "result.json")]:
         report += ["", "### "+title, ""]
         if not file.exists():
             report.append("NOT_RUN — 검증 산출물이 없습니다.")
@@ -81,7 +81,7 @@ def consolidate():
         report += [f"- 상태: **{result['status']}**, 실측 대조 {len(result.get('checks',[]))}건.",'- 실제 파일·표식 명령·HTTP 수신·업로드를 사용하는 로컬 취약/방어 쌍. 운영 사이트 정확도로 일반화하지 않습니다.']
     else:report.append('- NOT_RUN — 현재 실행파일에 연결된 서버 규칙 검증 결과가 없습니다.')
     report += ['', '이전 버전의 제3자 앱·확장 검증은 해당 기록의 해시와 수행 시각으로 구분합니다. 최신 실행파일과 일치하지 않으면 이번 검증 수에 합치지 않습니다.']
-    visual = OUT / "reliability-2.6" / "visual" / "report.json"
+    visual = OUT / "upgrade-2.7" / "visual" / "report.json"
     if visual.exists():
         data = json.loads(visual.read_text(encoding="utf-8"))
         failures = sum(x["level"] == "FAIL" for x in data["findings"])
@@ -91,12 +91,12 @@ def consolidate():
             report.append(f"- {viewport['width']}px: 페이지 가로 넘침 {viewport['metrics']['page']['horizontalOverflow']}px, JavaScript 예외 {len(viewport.get('consoleErrors',[]))}개.")
         for finding in data["findings"]:
             report.append(f"- {finding['level']} `{finding['id']}`: {finding['message']}")
-        lint = OUT / "taste-lint.txt"
+        lint = OUT / "upgrade-2.7" / "taste-lint.txt"
         if lint.exists():
             match = re.search(r"RESULT: (.+)",lint.read_text(encoding="utf-8-sig"))
             if match:
                 report.append("- 소스 lint: "+match[1]+". 숫자·URL의 고정폭 글꼴과 미측정 값의 대시 표시는 데이터 표현에 사용합니다.")
-        detector = OUT / "impeccable-detect.json"
+        detector = OUT / "upgrade-2.7" / "impeccable-detect.json"
         if detector.exists():
             findings = json.loads(detector.read_text(encoding="utf-8-sig"))
             report.append(f"- Impeccable detect: 보조 발견 {len(findings)}건. 진단 중 진행선 모션은 요청된 기능이며 완료 후 멈춥니다.")

@@ -222,6 +222,14 @@ ACTION_PLANS['CREDENTIAL_RESPONSE']=[
     ('노출 범위 확인','{endpoint}의 키 필드가 실제 인증정보인지, 공개·비공개 응답 정책과 유효 범위를 확인합니다.','실제 키와 공개 예시·식별자가 구분됩니다.'),
     ('응답 최소화와 접근 검사','비공개 자격증명을 응답에서 제거하고 필요한 인증·소유권 정책을 서버에서 적용합니다.','미인증 응답에 비공개 키가 포함되지 않습니다.'),
     ('실제 키 회수와 재검증','노출 값이 유효한 키이면 회수·교체하고 미인증·소유자·타 계정 요청을 재검증합니다.','폐기된 키는 거부되고 정상 계정의 허가된 기능은 유지됩니다.')]
+RULES['PUBLIC_CONFIGURATION']={
+    'summary':'외부 제공 경로에서 설정·저장소 파일 제거 및 관리 응답 접근 제한',
+    'impact':'내부 구조나 실제 비밀 값이 노출되면 후속 접근에 이용될 수 있습니다.',
+    'actions':[], 'verification':['미인증 응답과 무관 경로 응답을 반복 대조합니다.','실제 키가 노출됐다면 회수·교체와 접근 이력 확인을 수행합니다.']}
+ACTION_PLANS['PUBLIC_CONFIGURATION']=[
+    ('노출 파일과 범위 확인','{endpoint}의 외부 제공 설정과 실제 노출된 필드·관리 기능 범위를 확인합니다.','공개해야 할 응답과 비공개 자료가 구분됩니다.'),
+    ('외부 노출 차단','웹 배포물에서 환경설정·.git 자료를 제외하고 관리 엔드포인트를 내부 접근·인가 정책으로 제한합니다.','미인증 요청으로 비공개 자료를 읽지 못합니다.'),
+    ('실제 비밀 값 교체와 재진단','실제 키가 노출됐다면 회수·교체하고 같은 URL·검사 설정으로 재진단합니다.','노출이 재현되지 않고 정상 기능과 거부 응답이 유지됩니다.')]
 
 
 def finding_details(finding):
@@ -232,7 +240,9 @@ def finding_details(finding):
         "actions": [data.get("remediation") or "관찰 증거의 재현 조건을 확인하고 해당 기능의 통제를 보완합니다."],
         "verification": ["동일한 요청을 재실행해 문제 응답이 제거되고 정상 기능이 유지되는지 확인합니다."]})
     key = data["vuln_type"]
-    if data.get('id','').startswith('VULN-BOLA') and key=='INFO_DISCLOSURE':
+    if data.get('id','').startswith(('VULN-R21-','VULN-R22-','VULN-R23-')):
+        key='PUBLIC_CONFIGURATION'
+    elif data.get('id','').startswith('VULN-BOLA') and key=='INFO_DISCLOSURE':
         key='CREDENTIAL_RESPONSE'
     elif data.get('id','').startswith('VULN-POLICY') and key in ('BOLA_IDOR','AUTH_BYPASS'):
         key='POLICY_OBJECT' if key=='BOLA_IDOR' else 'POLICY_ROLE'

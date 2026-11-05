@@ -67,3 +67,13 @@ dialog{width:calc((100vw - 72px)*.75);max-width:none;height:75vh;max-height:calc
   .findings-table th,.findings-table td{color:#000!important;border-color:#ddd!important}
   .metric strong{color:#000!important}
 }
+
+/* Readable chain canvas and optional authenticated checks. */
+.dag-svg text{stroke:none}
+.scan-option-fields input:not([type=checkbox]):not([type=file]){background:var(--panel);border:1px solid var(--control);border-radius:var(--radius);color:var(--text);padding:8px 10px}
+.panel-heading:has(.graph-tools){flex-wrap:wrap;align-items:flex-start}.graph-tools{max-width:100%}
+.graph-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.graph-tools button{min-height:36px;padding:0 12px}.graph-tools output{min-width:54px;text-align:center;font-variant-numeric:tabular-nums}
+.chains-graph-viewport{height:400px;max-height:70vh;overflow:auto;overscroll-behavior:contain}.chains-graph-host{min-height:340px;padding:12px}.dag-svg{max-width:none!important;min-width:0;flex-shrink:0}.dag-text-title{font:600 16px var(--font)}.dag-text-sub{font:13px var(--font)}.dag-button{cursor:pointer}.dag-button:focus .dag-node,.dag-button:hover .dag-node{stroke:var(--text);stroke-width:2}.dag-edge{stroke:var(--accent);stroke-dasharray:none}.dag-edge-arrow{fill:var(--accent)}
+.panel:fullscreen{background:var(--bg,#101416);padding:24px}.panel:fullscreen .chains-graph-viewport{height:calc(100vh - 120px);max-height:none}.graph-expanded .chains-graph-viewport{height:70vh;max-height:none}
+.profile-help{margin-top:8px;padding:12px 0}.profile-help summary{cursor:pointer;font-size:14px}.profile-help p,.comparison-basis{font-size:14px;line-height:1.8;max-width:80ch;overflow-wrap:anywhere}.parameter-presets{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.parameter-presets span{font-size:13px}.coverage-summary{font-size:14px}
+@media(max-width:560px){.graph-tools{gap:6px}.graph-tools button{padding:0 10px}.chains-graph-viewport{height:380px}.profile-help p{font-size:14px}.graph-tools output{min-width:44px}}

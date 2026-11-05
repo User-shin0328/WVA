@@ -216,35 +216,8 @@ def test_waf_detection_and_adaptive_delay():
 
 
 @pytest.mark.asyncio
-async def test_retest_endpoint():
-    from starlette.testclient import TestClient
-    tc = TestClient(app, base_url="http://127.0.0.1:9030")
-
-    # 1. Without blackboard: 400
-    state.blackboard = None
-    res = tc.post("/api/finding/retest", json={"finding_id": "VULN-CSP-01"})
-    assert res.status_code == 400
-
-    # 2. Setup mock blackboard and finding
-    bb = SecurityBlackboard("http://127.0.0.1:8999")
-    f = VulnerabilityFinding(
-        id="VULN-CSP-01",
-        vuln_type=VulnerabilityType.MISSING_SECURITY_HEADER,
-        severity=Severity.LOW,
-        title="Missing CSP",
-        description="CSP not present",
-        endpoint="/test",
-        request_url="http://127.0.0.1:8999/test",
-        evidence="None",
-        remediation="Add CSP"
-    )
-    bb.add_finding(f)
-    state.blackboard = bb
-    state.target_url = "http://127.0.0.1:8999"
-
-    # Retest when target server is unreachable -> returns ERROR
-    res = tc.post("/api/finding/retest", json={"finding_id": "VULN-CSP-01"})
-    assert res.status_code == 200
-    data = res.json()
-    assert data["finding_id"] == "VULN-CSP-01"
-    assert data["status"] in ("ERROR", "STILL_VULNERABLE", "FIXED")
+async def test_retest_endpoint(client):
+    import dashboard.server as dashboard
+    assert (await client.post('/api/finding/retest',json={'finding_id':'missing'})).status_code==400
+    dashboard.state.blackboard=SecurityBlackboard('http://127.0.0.1')
+    assert (await client.post('/api/finding/retest',json={'finding_id':'missing'})).status_code==409

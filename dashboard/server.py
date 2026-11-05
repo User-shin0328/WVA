@@ -26,9 +26,10 @@ from core.safety.target import normalize_target_url
 from core.rules.contracts import ScanOptions
 from core.rules.redaction import public_data
 import hashlib
+import hmac
 
 STATIC_DIR = Path(__file__).parent / "static"
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -75,6 +76,7 @@ def get_previous_scan_report(target_url: str, current_scan_id: str, profile=None
     if not report_dir.exists():
         return None
     files = sorted(report_dir.glob("*.json"), key=os.path.getmtime, reverse=True)
+    candidates=[]
     for p in files:
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
@@ -82,10 +84,29 @@ def get_previous_scan_report(target_url: str, current_scan_id: str, profile=None
             meta = data.get("scan_metadata", {})
             if (data.get("schema") == "wva-report-2" and data.get("target_url") == target_url and stem_id != current_scan_id
                     and meta.get("completed") is True and meta.get("scan_id") != current_scan_id and meta.get("profile") == profile):
-                return data
+                candidates.append(data)
         except Exception:
             continue
-    return None
+    return max(candidates,key=lambda d:d.get('scan_metadata',{}).get('completed_at','')) if candidates else None
+
+
+def comparison_profile(engine):
+    options=engine.options.model_dump(mode='json',exclude={'sessions'})
+    accounts=[]
+    if engine.options.sessions:
+        keyfile=data_root()/'logs'/'comparison.key';keyfile.parent.mkdir(parents=True,exist_ok=True)
+        try:
+            with keyfile.open('xb') as handle:handle.write(os.urandom(32))
+        except FileExistsError:pass
+        key=keyfile.read_bytes()
+        if len(key)!=32:raise ValueError('계정 비교 식별 키를 확인할 수 없습니다.')
+        for session in engine.options.sessions:
+            private=session.model_dump(mode='json')
+            for field in ('headers','cookies','login_fields'):
+                private[field]={k:v.get_secret_value() for k,v in getattr(session,field).items()}
+            accounts.append(hmac.new(key,json.dumps(private,sort_keys=True).encode(),hashlib.sha256).hexdigest())
+    return {'scope_mode':state.scope_mode,'scope_path':engine.governance.scope_path or '/', 'ruleset':VERSION,
+            'options':hashlib.sha256(json.dumps(options,sort_keys=True).encode()).hexdigest(),'accounts':sorted(accounts)}
 
 class ScanRequest(BaseModel):
     target_url: str = "http://127.0.0.1:8989"
@@ -103,6 +124,7 @@ class ScanRequest(BaseModel):
 class DashboardState:
     def __init__(self):
         self.status = "idle"
+        self.retesting = False
         self.target_url = ""
         self.blackboard = None
         self.scan_task = None
@@ -155,9 +177,11 @@ async def run_scan_worker(target_url, is_demo, scope_mode="path", options=None):
         await asyncio.wait_for(engine.execute_audit(), timeout=180)
         state.blackboard.asset.metadata["report_metadata"] = {
             "scan_id": state.scan_id, "completed": True,
-            "profile": {"scope_mode": state.scope_mode, "scope_path": engine.governance.scope_path or "/", "ruleset": VERSION,
-                        "options": hashlib.sha256(json.dumps(engine.options.model_dump(mode='json',exclude={'sessions'}),sort_keys=True).encode()).hexdigest(),
-                        "accounts": sorted(s.alias for s in engine.options.sessions)}}
+            'started_at':state.started_at,'completed_at':now(),
+            'finding_reference':{'score':compute_score_and_grade(state.blackboard.get_findings_list())[0],
+                                 'grade':compute_score_and_grade(state.blackboard.get_findings_list())[1],
+                                 'scope':'발견 항목 기준 참고 값. 전체 사이트 안전 등급이 아닙니다.'},
+            "profile": comparison_profile(engine)}
         reporter = SecurityReportGenerator(state.blackboard)
         report_dir = data_root() / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -230,7 +254,7 @@ async def health():
 
 @app.post("/api/scan/start")
 async def start_scan(req: ScanRequest, request: Request = None):
-    if state.status == "running":
+    if state.status == "running" or state.retesting:
         raise HTTPException(409, "진단이 진행 중입니다. 완료하거나 중단한 뒤 다시 시작하세요.")
     if not req.consent and not req.demo:
         raise HTTPException(400, "진단 권한 확인에 동의해야 시작할 수 있습니다.")
@@ -320,6 +344,7 @@ async def get_status():
         severity[f.severity.value] += 1
     checks=bb.asset.metadata.get('checks',[]) if bb else []
     score, grade = compute_score_and_grade(findings) if state.status == "completed" else (None, None)
+    finding_grade=grade
     required=bb.asset.metadata.get('required_checks',[]) if bb else []
     pending=pending_checks(checks,required)
     if bb and bb.asset.metadata.get('chain_truncated'):pending.append('연계 경로 탐색 상한')
@@ -327,8 +352,9 @@ async def get_status():
     return {"status": state.status, "target_url": state.target_url, "mode": getattr(state, "mode", "safe"),
             "endpoints_count": len(bb.asset.endpoints) if bb else 0,
             "findings_count": len(findings), "chains_count": len(bb.chains) if bb else 0,
-            "severity": severity, "score": score, "grade": grade, "checks":checks,"assessment_complete":state.status=='completed' and bool(checks) and not pending,
-            "assessment_note":'전체 사이트 안전 등급이 아닌 발견 항목 기준 점수입니다.' if not pending else '판정 보류: '+', '.join(pending),
+            "severity": severity, "score": score, "grade": grade,'finding_grade':finding_grade, "checks":checks,"assessment_complete":state.status=='completed' and bool(checks) and not pending,
+            'pending_checks':pending,
+            "assessment_note":'참고 등급은 발견 항목 기준이며 전체 사이트 안전을 뜻하지 않습니다.'+(' 미완료 검사: '+', '.join(pending) if pending else ' 선택한 검사 완료.'),
             "waf_detected": bool(bb.asset.metadata.get("waf_detected", False)) if bb else False,
             "error": state.last_error, "scan_id": state.scan_id,
             "started_at": state.started_at, "finished_at": state.finished_at,
@@ -378,10 +404,15 @@ async def get_diff():
 
     return {
         "has_previous": True,
+        'baseline_scan_id':prev.get('scan_metadata',{}).get('scan_id'),
+        'baseline_completed_at':prev.get('scan_metadata',{}).get('completed_at'),
+        'comparison_basis':'같은 대상 URL·범위·규칙 버전·검사 설정·계정 식별의 이전 완료 진단과 발견 ID를 비교합니다. 미발견은 조치 완료의 증명이 아닙니다.',
         "previous_score": prev_score,
+        'previous_finding_grade':compute_score_and_grade(prev_findings)[1],
         "previous_grade": prev_grade,
         "current_score": curr_score,
         "current_grade": curr_grade,
+        'current_finding_grade':compute_score_and_grade(curr_findings)[1],
         "score_diff": curr_score - prev_score,
         "fixed_count": len(fixed_ids),
         "new_count": len(new_ids),
@@ -448,7 +479,7 @@ async def selected_export(req: ExportRequest):
     for section in req.sections:
         if section == "summary":
             status = await get_status()
-            payload[section] = {k: status[k] for k in ("findings_count", "chains_count", "endpoints_count", "severity", "score", "grade")}
+            payload[section] = {k: status[k] for k in ("findings_count", "chains_count", "endpoints_count", "severity", "score", "grade","finding_grade","assessment_complete","assessment_note")}
         elif section == "findings":
             payload[section] = await get_findings()
         elif section == "chains":
@@ -493,59 +524,48 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 def start_server(host="127.0.0.1", port=9030):
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
-if __name__ == "__main__":
-    start_server()
-
-
 class RetestRequest(BaseModel):
     finding_id: str
+    scan_id: str | None = None
 
-@app.post("/api/finding/retest")
+
+@app.post('/api/finding/retest')
 async def retest_finding(req: RetestRequest):
     if not state.blackboard:
-        raise HTTPException(400, "진단 데이터가 없습니다. 먼저 진단을 실행하세요.")
-    finding = state.blackboard.findings.get(req.finding_id) or next((f for f in state.blackboard.get_findings_list() if f.id == req.finding_id), None)
-    if not finding:
-        raise HTTPException(404, f"해당 취약점({req.finding_id})을 찾을 수 없습니다.")
+        raise HTTPException(400,'진단 데이터가 없습니다. 먼저 진단을 실행하세요.')
+    if state.status!='completed' or state.retesting:
+        raise HTTPException(409,'진단 완료 후 다른 검사가 끝나면 재검증하세요.')
+    if req.scan_id and req.scan_id!=state.scan_id:
+        raise HTTPException(409,'진단 결과가 바뀌었습니다. 현재 항목을 다시 선택하세요.')
+    finding=state.blackboard.findings.get(req.finding_id)
+    if not finding:raise HTTPException(404,'해당 발견 항목을 찾을 수 없습니다.')
+    from core.safety.governance import SafetyGovernance
+    from core.http.requester import RequestBudget
+    from core.rules.retest import verify
+    options=(state.options or ScanOptions()).model_copy(deep=True)
+    governance=SafetyGovernance(state.target_url,scope_mode=state.scope_mode)
+    budget=RequestBudget(governance,options)
+    state.retesting=True
+    try:
+        auth={}
+        profile=next((s for s in options.sessions if s.alias==options.primary_session),None)
+        if profile:
+            auth={'headers':{k:v.get_secret_value() for k,v in profile.headers.items()},'cookies':{k:v.get_secret_value() for k,v in profile.cookies.items()}}
+        async with budget.client(**auth) as client:
+            if profile and profile.login_url:
+                from agents.policy_auditor import post_form
+                budget.allow_post(profile.login_url)
+                response=await post_form(client,profile.login_url,{k:v.get_secret_value() for k,v in profile.login_fields.items()})
+                if response.status_code>=400:raise ValueError('기준 계정 로그인 요청 실패')
+            status,message=await asyncio.wait_for(verify(finding,client,governance,options),timeout=90)
+        result={'finding_id':finding.id,'scan_id':state.scan_id,'status':status,'message':message,'checked_at':now(),'requests':budget.count}
+    except Exception as exc:
+        result={'finding_id':finding.id,'scan_id':state.scan_id,'status':'ERROR','message':public_data(str(exc),state.blackboard.private_values) or '재검증 시간 초과','checked_at':now(),'requests':budget.count}
+    finally:state.retesting=False
+    state.blackboard.asset.metadata.setdefault('retests',[]).append(result)
+    event_callback('log',f"재검증 {finding.id}: {result['status']} · {result['message']}")
+    return result
 
-    async with httpx.AsyncClient(timeout=6.0, follow_redirects=False, verify=False) as client:
-        try:
-            target_url = finding.request_url or (state.target_url.rstrip("/") + finding.endpoint)
-            # 1. Header checks
-            if finding.vuln_type == VulnerabilityType.MISSING_SECURITY_HEADER:
-                res = await client.get(target_url)
-                hdrs = [k.lower() for k in res.headers]
-                if "content-security-policy" in hdrs or "strict-transport-security" in hdrs:
-                    return {"status": "FIXED", "finding_id": finding.id, "message": "보안 헤더가 정상적으로 추가되었습니다."}
-                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "보안 헤더가 여전히 누락되어 있습니다."}
 
-            # 2. CORS checks
-            if finding.vuln_type == VulnerabilityType.CORS_MISCONFIGURATION:
-                res = await client.get(target_url, headers={"Origin": "https://evil.com"})
-                acao = res.headers.get("access-control-allow-origin")
-                if acao != "https://evil.com":
-                    return {"status": "FIXED", "finding_id": finding.id, "message": "임의 Origin 반사가 차단되었습니다."}
-                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "임의 Origin이 여전히 허용됩니다."}
-
-            # 3. SQL Injection checks
-            if finding.vuln_type == VulnerabilityType.SQL_INJECTION:
-                res = await client.get(target_url)
-                if "SQL_INJECTION_PWNED" not in res.text and "SQLSTATE" not in res.text and "syntax error" not in res.text.lower():
-                    return {"status": "FIXED", "finding_id": finding.id, "message": "SQL 인젝션 실행 및 오류 시그니처가 차단되었습니다."}
-                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "SQL 인젝션 취약점이 여전히 관찰됩니다."}
-
-            # 4. Open Redirect
-            if finding.vuln_type == VulnerabilityType.OPEN_REDIRECT:
-                res = await client.get(target_url)
-                loc = res.headers.get("location", "")
-                if not loc.startswith("https://example.com") and not loc.startswith("//example.com"):
-                    return {"status": "FIXED", "finding_id": finding.id, "message": "외부 도메인 리다이렉트가 차단되었습니다."}
-                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "외부 도메인 리다이렉트가 여전히 허용됩니다."}
-
-            # 5. Generic check
-            res = await client.get(target_url)
-            if res.status_code in (401, 403, 404):
-                return {"status": "FIXED", "finding_id": finding.id, "message": f"접근이 제한되었습니다 (HTTP {res.status_code})."}
-            return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "엔드포인트가 여전히 접근 가능하며 조치가 확인되지 않았습니다."}
-        except Exception as exc:
-            return {"status": "ERROR", "finding_id": finding.id, "message": f"재검증 요청 실패: {exc}"}
+if __name__ == "__main__":
+    start_server()

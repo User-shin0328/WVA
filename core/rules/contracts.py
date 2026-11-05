@@ -70,6 +70,9 @@ class SystemCase(BaseModel):
 class ScanOptions(BaseModel):
     mode: Literal['safe', 'deep'] = 'safe'
     sql: bool = True
+    sql_common_parameters: bool = True
+    sql_candidate_limit: int = Field(default=12,ge=1,le=24)
+    exposure: bool = True
     xss: bool = True
     browser: bool = True
     concurrency_check: bool = True
@@ -101,7 +104,7 @@ class CheckResult(BaseModel):
     errors: int = 0
     inconclusive: int = 0
     required: bool = True
-    version: str = '2.6.0'
+    version: str = '2.7.0'
 
 
 def record(bb, rule_id, title, status, reason, tested=0, findings=0, errors=0, required=None, inconclusive=0):

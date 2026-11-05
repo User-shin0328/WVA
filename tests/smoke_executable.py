@@ -1,4 +1,5 @@
 """Validate a copied, standalone executable from a Korean path, without source files."""
+import asyncio
 import hashlib
 import json
 import os
@@ -33,6 +34,10 @@ def run():
     proc = subprocess.Popen([str(executable), "--no-browser", "--port", str(port)], cwd=isolated,
                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     client = httpx.Client(base_url=base, timeout=10, trust_env=False)
+    from dashboard.testbed import LocalTestbed
+    from tests.lab.baseline_target import app as baseline
+    lab=LocalTestbed(baseline)
+    target=asyncio.run(lab.start())
     try:
         for _ in range(200):
             try:
@@ -47,7 +52,7 @@ def run():
         for path in ["/", "/static/app.css", "/static/app.js", "/static/fonts/NotoSansKR.ttf", "/static/fonts/IBMPlexMono-Regular.ttf"]:
             response = client.get(path)
             check("bundled_asset:"+path, response.status_code == 200 and len(response.content) > 100, {"status": response.status_code,"bytes": len(response.content)})
-        check("start_demo", client.post("/api/scan/start", json={"demo": True}).status_code == 200, "Embedded lab starts without Python subprocess")
+        check("start_demo", client.post("/api/scan/start", json={"target_url":target,"consent":True}).status_code == 200, "Copied executable diagnoses a separately hosted owned baseline fixture")
         for _ in range(200):
             status = client.get("/api/scan/status").json()
             if status["status"] != "running":
@@ -59,10 +64,10 @@ def run():
         details = client.get("/api/scan/findings").json()
         check("detailed_remediation", all(f["remediation_details"]["steps"] and all(s["expected_result"] for s in f["remediation_details"]["steps"]) for f in details), "5 findings include ordered actions, completion criteria and verification")
         surface = client.get("/api/scan/surface").json()
-        check("integrated_version", client.get("/api/health").json()["version"] == "2.6.0", "Integrated executable identifies as WVA 2.6.0")
+        check("integrated_version", client.get("/api/health").json()["version"] == "2.7.0", "Integrated executable identifies as WVA 2.7.0")
         check("risk_and_ai_context", all(f["risk_context"]["limits"] and f["ai_prompt"] == f["remediation_details"]["ai_prompt"] for f in details), "Conditional risk limits and local AI prompt coexist in all five findings")
         check("reference_grade", isinstance(status["score"], int) and status["grade"] is None and not status['assessment_complete'], {"score": status["score"], "grade": status["grade"],"reason":"Default demo lacks required SQL/browser evidence; all aggregate grades are withheld"})
-        check("comparison_metadata", client.get("/api/scan/report/json").json()["scan_metadata"]["profile"]["ruleset"] == "2.6.0", "Completed report records scope and rule version")
+        check("comparison_metadata", client.get("/api/scan/report/json").json()["scan_metadata"]["profile"]["ruleset"] == "2.7.0", "Completed report records scope and rule version")
         check("surface_metadata", surface["measured_count"] == 7 and surface["schema_only_count"] == 1, surface)
         log_file = Path(status["log_path"])
         check("persistent_scan_log", log_file.is_file() and '"status": "completed"' in log_file.read_text(encoding="utf-8"), str(log_file))
@@ -98,6 +103,7 @@ def run():
         result["error"] = str(exc)
         raise
     finally:
+        asyncio.run(lab.stop())
         try:client.post('/api/app/shutdown',json={})
         except httpx.HTTPError:pass
         client.close()

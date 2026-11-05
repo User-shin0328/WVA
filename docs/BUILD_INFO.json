@@ -1,21 +1,22 @@
 {
   "product": "WVA",
-  "version": "2.6.0",
-  "date": "2026-11-05",
+  "version": "2.7.0",
+  "date": "2026-11-06",
   "platform": "Windows x64",
   "file": "WVA.exe",
-  "bytes": 64669339,
-  "sha256": "ac580303fead5c9a249f25d5c120b4476e56cbbbffe8fde10cfb2c645a014ef7",
-  "source_base_commit": "86fcbb876050eb6905eed64033a56d35c911ec73",
+  "bytes": 65731911,
+  "sha256": "368604c1da0384ba4faff9fe9094c9644ff336cb24cfa1a30b51b3217941f39b",
+  "source_base_commit": "fc8d448a14a86d77d98ff7eb743243a7c96877f3",
   "source_worktree_dirty": true,
   "source_files": {
     "agents/base.py": "64db5f29e821ce05c94798d9f0d4fcb0b5bb2c13e7109e1fe3b950f4bea1d6f1",
     "agents/browser_auditor.py": "6bdfe4bc8148e804dbe1c799af5ee1b8b7a9e10eb8fc776b27915a92b9a644eb",
     "agents/chain_planner.py": "bee2c30ca31c60beb2729c43d1e2f18bf423c22846f86a37ff0707e795b306ca",
     "agents/config_auditor.py": "aeac473b6c43b5b76dd94312ee4bfdb9b70bc0b030bbd873e07b1c7e97c9a23d",
-    "agents/engine.py": "ce2c46e585621ab8066ceabb657a037acab80aa0edb08e32b203e6f18bdd5e35",
+    "agents/engine.py": "1e67b0ed7799c6a55d4d904798e3efa9ede05f3e71b2147dafac977dd7e203a2",
+    "agents/exposure_auditor.py": "f81723936924d2d59af7ab983ad8d824ee2942aa00d2d32b80ebf8560b41cf35",
     "agents/idor_auditor.py": "e5471d1c190aa99d46f67d48abdb4edc07e473b1b1ceb4c0d08caee04aa6cce7",
-    "agents/injection_auditor.py": "86c3698cbe5dc1e1dacf60e89e5b695eda18294e1c53b6782522332d7e9fb93b",
+    "agents/injection_auditor.py": "564d331449617153bd12237778e812dd9231e441b7c83746ef58194fe34822d0",
     "agents/policy_auditor.py": "eb5e3381eff656dd9f5d3559d498d6c7b59704250a257e974822ac507b449c8f",
     "agents/system_auditor.py": "28ed6a37419cbc4684cd4f00371eccfd6504360841d8505148b85b6914adfd02",
     "core/graph/attack_graph.py": "7d034ce85c45929e9593c3801eb812a89619db415fddfe1aac036c1d1d7d4ca1",
@@ -24,35 +25,96 @@
     "core/http/requester.py": "c378578cce2eb828811f76f433745093e7f434099acc50a4f09dca8a423ca92f",
     "core/models/asset.py": "4e08a119ad4f2faf6ab5090a8b35e5406babffc22f03a917d85dccfc6f005823",
     "core/models/state.py": "63850a55da815fad884c29237eac68342eaf8a93459fe318b09a87a0ac5764f9",
-    "core/models/vulnerability.py": "398f352083a0b24be93727d46d2b07a083bf262ac6178c0b98f05e1055491473",
+    "core/models/vulnerability.py": "6e9df46962f00f246d842e38a80626eb1aebe75042dc28ab1a6f69fdacc20344",
     "core/rules/__init__.py": "2b59987750d56c1f4c0b9ce8a705e03a6d652f08d1895999d5426326659221b6",
-    "core/rules/contracts.py": "f5f950513c46e9d9c77e84246ed7abf8ce434a371ad11655be7575760ddd2805",
+    "core/rules/contracts.py": "c1fb91fc750bd450e8fdcf52f87a887970f8e6182524ab20fc26f2c5d7f78dfa",
     "core/rules/redaction.py": "9a9240a84a35fbcd2a80ef4971775ddb0a6ce91c126960553a15160ceea1693b",
+    "core/rules/retest.py": "5f851ad871255e0952b72d11b7de7f8ca8979656d40cb20f10a34665121d5016",
     "core/safety/governance.py": "920cb2ff45b9d34ce5ed429460719c82756cbcac36bd078cab95768c04c80954",
     "core/safety/target.py": "b695a9cdedc185ec6ec33b3e6e91ec299256ba0d4b5accb0671849fd23aac1ec",
-    "dashboard/server.py": "440a548b99eb144174931216cae8c063b63b2d7441513923c483dcacf4ada47c",
-    "dashboard/static/app.css": "bb0fd522cb60eac101e962223c359b9eedd88b01695e7d39445b9d00380101e1",
-    "dashboard/static/app.js": "59abfbb0c6e1452664db087b8912a37bde0dff0507295f6d1b4bd31b9c3c9699",
+    "dashboard/server.py": "702abb281ee86a43451498354b70a8b0abe5b4e7b5b68da5a5b4d03b5fdb19d4",
+    "dashboard/static/app.css": "15d8c93deb133c0dc18c00c5c43afc4b48a3722ea9035deac958b74950006098",
+    "dashboard/static/app.js": "f6379fe2bde41019ba300718721a6b400b88c53e028f59755f4a3010e3424099",
     "dashboard/static/fonts/IBMPlexMono-Regular.ttf": "6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46",
     "dashboard/static/fonts/NotoSansKR.ttf": "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252",
-    "dashboard/static/index.html": "902a8ce7e931df6ec6538774a878ad24a8d17ef79e4ef3752920705f1319ec94",
+    "dashboard/static/index.html": "a260322b312f3e2468dd267070ab8fd8c02ff193c7d5e83caf2dacc6df989673",
     "dashboard/static/mark.svg": "3f14096668eea3cd40781b390cc5337b5f6e4c3c39dc7851efda912c1a41794a",
     "dashboard/testbed.py": "40effbe1f9c9fe5751a46e7730e895d6cf59fcae1be0c82ab148d585b4880e6c",
     "launcher.py": "644a9c70b7a812ef9a1390407d665876f8cf13f9a1f71db4e897c48a75a26b82",
-    "mock_target.py": "1e363cb315f3932ecf05deeaf4d87472d59125fb0b13d4c9a33a22c7e38c9318",
+    "mock_target.py": "6a3ea383d47c628cf78c6a452d8ab47fb320f45a9b7eef3822c690fb1bd534f0",
     "packaging/build.ps1": "5b986a3d33a951292f2fd3bbe5844c61fd5687c671244ab927a8073b07e10f73",
-    "packaging/build_manifest.py": "9a4e0f720c7096bf30475becf3d0b7333ed807fb2e8344b4a55a50b8b93e72a5",
-    "reporting/remediation.py": "eb4485c5268dcd9d693fea0014d3c4363350c4a6f71a4d31a8a7e46b55aebbc7",
+    "packaging/build_manifest.py": "3b15f832d406e41c23f70f8c53009b672afb2d4933513ccfc9e0a0ce7cd94dcb",
+    "reporting/remediation.py": "a9b51a760b07a642ca18976fd272b02da8f49ad96ff8402e63e45bc43151d578",
     "reporting/report_generator.py": "78e0c218e3d0925c21a20b3279865b1813f891d30686ec755aa687149ba5b7ba",
-    "reporting/risk_context.py": "bdac8d6333df2a437e6765405069595629e38be5db204b390730515ed7c56414",
+    "reporting/risk_context.py": "7f892c4b8cd315948f97be898719a484221cafdbf92637d521d05fc1e866edef",
     "reporting/selected_export.py": "dca80e13b3f7b4531bd2516dd35ddf1fe5992a3a3943cfd169f61fd7c6b09d4a",
     "requirements-lock.txt": "5698359565981d3ddd3a3e85d2c5cb44870577c5342ddd0d67c0f810b13a88c3",
     "surface/recon.py": "739870d500d75ae7a31a243a44bb498e3041e8dca7b367075380edd80eb4685d",
     "surface/reflection.py": "9908d31873706a9fa04f162596dab7e6a6ecdb047d6e3328a33deaf17154724d"
   },
-  "validation_status": "NOT_RUN",
+  "validation_status": "PASS",
   "default_port": 9030,
   "test_guide": "tests/TEST_GUIDE.md",
-  "implementation_report": "docs/RELIABILITY_UPGRADE_2.6.md",
-  "browser_runtime": "Playwright 1.64.1 bundled; installed Edge/Chrome or Playwright Chromium required"
+  "implementation_report": "docs/WORKFLOW_UPGRADE_2.7.md",
+  "browser_runtime": "Playwright 1.64.1 bundled; installed Edge/Chrome or Playwright Chromium required",
+  "validated_at": "2026-11-06T01:50:26+09:00",
+  "validation_scope": {
+    "standalone_executable": {
+      "status": "PASS",
+      "checks": 27,
+      "artifact": "tests/artifacts/executable-smoke.json",
+      "at": "2026-11-06T01:46:00.424596+09:00"
+    },
+    "browser_baseline": {
+      "status": "PASS",
+      "checks": 40,
+      "artifact": "tests/artifacts/browser/result.json",
+      "at": "2026-11-05T16:46:52.581Z"
+    },
+    "browser_workflow_27": {
+      "status": "PASS",
+      "checks": 19,
+      "artifact": "tests/artifacts/upgrade-2.7/browser/result.json",
+      "at": "2026-11-05T16:48:04.184Z"
+    },
+    "server_source_executable": {
+      "status": "PASS",
+      "checks": 20,
+      "artifact": "tests/artifacts/reliability-2.6/acceptance.json",
+      "at": "2026-11-06T01:48:01.466180+09:00"
+    },
+    "extended_source_executable": {
+      "status": "PASS",
+      "checks": 10,
+      "artifact": "tests/artifacts/benchmark/extended-result.json",
+      "at": "2026-11-06T01:48:01+09:00"
+    },
+    "functional": {
+      "status": "PASS",
+      "checks": 190,
+      "artifact": "tests/artifacts/pytest.xml",
+      "unchanged_during_run": true,
+      "later_test_harness_only_changes": [
+        "tests/run_tests.py",
+        "tests/ui_workflow.cjs"
+      ]
+    },
+    "visual": {
+      "status": "PASS_WITH_WARNINGS",
+      "failures": 0,
+      "warnings": 2,
+      "widths": [
+        1440,
+        768,
+        390
+      ],
+      "artifact": "tests/artifacts/upgrade-2.7/visual/report.json"
+    }
+  },
+  "validation_limitations": [
+    "Owned local HTTP/SQLite fixtures only; no external production targets tested.",
+    "Reference finding grade is not whole-site safety certification.",
+    "Visual warnings retained for five severity hues and small auxiliary data text.",
+    "Other Windows PCs and antivirus products NOT_RUN."
+  ]
 }

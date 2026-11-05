@@ -4,15 +4,16 @@ const severityNames = {CRITICAL:'심각',HIGH:'높음',MEDIUM:'중간',LOW:'낮�
 const severityRank = {CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
 const typeNames = {MISSING_SECURITY_HEADER:'보안 헤더 누락',EXPOSED_DEBUG_ENDPOINT:'디버그 정보 노출',INFO_DISCLOSURE:'민감 정보 노출',BOLA_IDOR:'객체 접근 통제 누락',PRIVILEGE_ESCALATION:'유출 키로 관리자 응답 접근',CORS_MISCONFIGURATION:'외부 출처 접근 허용',COOKIE_SECURITY_FLAG:'쿠키 보안 속성 누락',AUTH_BYPASS:'인증 우회',PARAMETER_REFLECTION:'입력값 반사',SECRET_LEAK:'클라이언트 스크립트 시크릿 노출',TLS_EXPIRING:'SSL/TLS 인증서 만료 임박',PATH_TRAVERSAL:'경로 조작 및 시스템 파일 접근 (Path Traversal / LFI)',COMMAND_INJECTION:'OS 시스템 명령어 삽입 (Command Injection / RCE)',SSRF:'서버 측 요청 위조 (SSRF)',ARBITRARY_FILE_UPLOAD:'위험 확장자 파일 무제한 업로드 (Arbitrary File Upload)',SQL_INJECTION:'SQL 주입 (SQL Injection)',OPEN_REDIRECT:'오픈 리다이렉트 (Open Redirect)'};
 const statusNames = {idle:'진단 대기',running:'진단 중',completed:'진단 완료',stopped:'진단 중단 · 부분 결과',error:'진단 실패'};
-const views = {overview:'웹 대상 진단',chains:'취약점 연계 경로',endpoints:'공격 표면',logs:'진단 로그',save:'정보 저장'};
+const views = {overview:'웹 대상 진단',chains:'취약점 체인',endpoints:'공격 표면',logs:'진단 로그',save:'정보 저장'};
 const exportNames = {summary:'진단 요약',findings:'발견 항목',chains:'연계 경로',endpoints:'공격 표면',logs:'진단 로그'};
 const phases = ['연결','표면 탐색','설정 점검','접근 제어','경로 분석'];
 const sources = {surface_discovery:'경로 탐색',link_parser:'HTML 링크',form_parser:'HTML 폼',openapi:'API 문서',script_parser:'스크립트'};
 let snapshot=null,findings=[],chains=[],endpoints=[],logs=[],consentLogs=[],surface={},diffData=null,selected=null;
+let graphZoom=1;
 let renderKey='',refreshing=false,starting=false,stopping=false,shuttingDown=false,exporting=false,activeView='overview';
 
 function el(tag,className,text){const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;}
-function label(f){if(['SQL_INJECTION','XSS'].includes(f.vuln_type))return f.title;if(f.id.startsWith('VULN-CSP'))return '콘텐츠 보안 정책(CSP) 누락';if(f.id.startsWith('VULN-HSTS'))return 'HTTPS 강제 정책(HSTS) 누락';if(f.id.startsWith('VULN-SECRET-LEAK'))return '클라이언트 스크립트 API 키/시크릿 노출';if(f.id.startsWith('VULN-TLS-EXPIRING'))return 'SSL/TLS 인증서 만료 임박';return typeNames[f.vuln_type]||f.title;}
+function label(f){if(/^VULN-R2[123]-/.test(f.id))return f.title;if(['SQL_INJECTION','XSS'].includes(f.vuln_type))return f.title;if(f.id.startsWith('VULN-CSP'))return '콘텐츠 보안 정책(CSP) 누락';if(f.id.startsWith('VULN-HSTS'))return 'HTTPS 강제 정책(HSTS) 누락';if(f.id.startsWith('VULN-SECRET-LEAK'))return '클라이언트 스크립트 API 키/시크릿 노출';if(f.id.startsWith('VULN-TLS-EXPIRING'))return 'SSL/TLS 인증서 만료 임박';return typeNames[f.vuln_type]||f.title;}
 function error(message){$('error').textContent=message||'';$('error').hidden=!message;}
 async function responseError(response){let msg='요청을 처리하지 못했습니다.';try{const body=await response.json();msg=Array.isArray(body.detail)?body.detail.map(x=>x.msg.replace(/^Value error, /,'')).join(' '):body.detail||msg;}catch(_){}return new Error(msg);}
 async function api(path,options){const response=await fetch(path,options);if(!response.ok)throw await responseError(response);return response.json();}
@@ -25,7 +26,8 @@ function setView(name,updateHash=true){
   for(const b of document.querySelectorAll('[data-view]')){const current=b.dataset.view===name;b.classList.toggle('active',current);if(current)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');}
   $('page-title').textContent=views[name];
   $('target-section').hidden=!['overview','chains'].includes(name);$('scan-state').hidden=!['overview','chains'].includes(name);$('metrics').hidden=name!=='overview';$('go-save').hidden=name==='save';
-  if(updateHash)history.replaceState(null,'','#'+name);
+  if(updateHash){history.replaceState(null,'','#'+name);window.scrollTo(0,0);}
+  $('assessment-note').hidden=name!=='overview'||snapshot?.status!=='completed';$('coverage-summary').hidden=name!=='overview'||snapshot?.status!=='completed';
   if(name==='overview')requestAnimationFrame(renderCharts);
 }
 function renderStatus(){
@@ -37,7 +39,7 @@ function renderStatus(){
   const gradeEl=$('security-grade');
   if(gradeEl){
     if(!running&&s.status==='completed'){
-      const grade=s.grade||(s.checks?.length?'보류':'—');gradeEl.textContent=grade;
+      const grade=s.finding_grade||s.grade||(s.checks?.length?'보류':'—');gradeEl.textContent=grade;
       if(grade==='A'||grade==='B')gradeEl.style.color='var(--accent)';
       else if(grade==='C')gradeEl.style.color='#ffd43b';
       else if(grade==='D'||grade==='F')gradeEl.style.color='var(--danger)';
@@ -49,7 +51,7 @@ function renderStatus(){
   const scoreEl=$('security-score');
   if(scoreEl)scoreEl.textContent=!running&&s.status==='completed'&&Number.isFinite(s.score)?(s.score+'점'):'—';
   for(const button of document.querySelectorAll('.finding-name,.chain-step'))button.disabled=running;renderChecks();
-  $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('scope-mode').disabled=running;if($('scan-mode'))$('scan-mode').disabled=running;$('demo').disabled=running;$('stop').hidden=!running;$('stop').disabled=starting||stopping;
+  $('start').disabled=running;$('start').textContent=running?'진단 중…':'진단 시작';$('target').disabled=running;$('scope-mode').disabled=running;if($('scan-mode'))$('scan-mode').disabled=running;$('stop').hidden=!running;$('stop').disabled=starting||stopping;
   for(const input of document.querySelectorAll('.scan-option-fields input,.scan-option-fields button'))input.disabled=running;
   $('scan-phases').hidden=!running;
   const phase=starting?0:(s.phase||0);$('scan-phases').replaceChildren(...phases.map((name,index)=>{const item=el('li',index<phase?'done':index===phase&&running?'current':'',name);if(index===phase&&running)item.setAttribute('aria-current','step');return item;}));
@@ -62,9 +64,10 @@ const checkNames={PASS:'확인 완료',FINDING:'발견',SIGNAL:'판정 보류',N
 function renderChecks(){
   const rows=snapshot?.checks||[];$('check-count').textContent=rows.length+'개';
   $('checks-body').replaceChildren(...rows.map(r=>{const tr=el('tr');tr.append(el('td','',r.title),el('td',r.status==='FINDING'?'severity HIGH':'',(checkNames[r.status]||r.status)+(r.errors?' · 일부 미완료':'')+(r.inconclusive?' · 일부 미확정':'')),el('td','numeric',String(r.tested)),el('td','check-reason',r.reason));return tr;}));
-  $('assessment-note').hidden=snapshot?.status!=='completed';$('assessment-note').textContent=snapshot?.assessment_note||'';
+  $('coverage-summary').hidden=activeView!=='overview'||snapshot?.status!=='completed';$('coverage-summary').textContent=(snapshot?.assessment_complete?'선택한 필수 검사 완료':'검사 미완료 · '+(snapshot?.pending_checks?.length||0)+'개')+' · 전체 검사 항목 '+rows.length+'개';
+  $('assessment-note').hidden=activeView!=='overview'||snapshot?.status!=='completed';$('assessment-note').textContent=snapshot?.assessment_note||'';
 }
-if($('clear-profile'))$('clear-profile').addEventListener('click',()=>{$('option-profile').value='';});
+if($('clear-profile'))$('clear-profile').addEventListener('click',()=>{$('option-profile').value='';$('profile-selection').textContent='프로필 없음 · 미인증 검사';});
 function svg(tag,attributes={},text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attributes))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;return n;}
 function pieChart(host,entries,title){
   const width=Math.max(290,Math.round(host.getBoundingClientRect().width)-32),stacked=width<440;
@@ -151,42 +154,7 @@ function renderChains(){
     article.append(header,steps);return article;
   });
 
-  const graphHost=$('chains-graph');
-  if(graphHost){
-    if(!chains.length){
-      graphHost.replaceChildren(el('p','empty-text','연계 경로 0건'));
-    }else{
-      const svgW=Math.max(680, chains.reduce((max,c)=>Math.max(max, c.steps.length*220+80), 680));
-      const svgH=chains.length*90+40;
-      const gSvg=svg('svg',{viewBox:`0 0 ${svgW} ${svgH}`,class:'dag-svg'});
-      const defs=svg('defs');
-      const marker=svg('marker',{id:'arrow',viewBox:'0 0 10 10',refX:'8',refY:'5',markerWidth:'6',markerHeight:'6',orient:'auto-start-reverse'});
-      marker.append(svg('path',{d:'M 0 1 L 10 5 L 0 9 z',class:'dag-edge-arrow'}));
-      defs.append(marker);
-      gSvg.append(defs);
-      chains.forEach((chain, cIdx)=>{
-        const y=45+cIdx*90;
-        chain.steps.forEach((step, sIdx)=>{
-          const x=30+sIdx*220;
-          const f=findings.find(x=>x.id===step.finding_id);
-          const fTitle=f?label(f):step.action_description;
-          const fTrunc=fTitle.length>18?fTitle.slice(0,17)+'…':fTitle;
-          const rect=svg('rect',{x,y:y-28,width:180,height:56,class:'dag-node'});
-          rect.style.cursor='pointer';
-          rect.addEventListener('click',()=>openFinding(step.finding_id));
-          const stepText=svg('text',{x:x+10,y:y-10,class:'dag-text-sub'},`STEP ${step.step_number}: ${step.finding_id}`);
-          const titleText=svg('text',{x:x+10,y:y+12,class:'dag-text-title'},fTrunc);
-          gSvg.append(rect,stepText,titleText);
-          if(sIdx>0){
-            const prevX=30+(sIdx-1)*220+180;
-            const line=svg('line',{x1:prevX,y1:y,x2:x-6,y2:y,class:'dag-edge','marker-end':'url(#arrow)'});
-            gSvg.append(line);
-          }
-        });
-      });
-      graphHost.replaceChildren(gSvg);
-    }
-  }
+  renderAttackGraph();
 
   if(!blocks.length)blocks.push(el('p','empty-text','연계 경로 0건'));$('chains-list').replaceChildren(...blocks);$('chain-count').textContent=chains.length+'건';
   const ids=new Set(chains.flatMap(c=>c.steps.map(s=>s.finding_id)));const related=findings.filter(f=>ids.has(f.id));$('related-body').replaceChildren(...related.map(createFindingRow));$('related-count').textContent=related.length+'건';$('related-empty').hidden=related.length>0;
@@ -236,9 +204,9 @@ async function updateDiff(){
       const banner=$('diff-banner');
       if(banner){
         if(diffData?.has_previous){
-          banner.hidden=false;
+          banner.hidden=false;$('diff-basis').textContent='비교 기준: '+(diffData.baseline_completed_at?new Date(diffData.baseline_completed_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}):'이전 완료 진단')+' · '+(diffData.baseline_scan_id||'')+' · '+(diffData.comparison_basis||'같은 대상·범위·검사 설정');
           const sign=diffData.score_diff>0?'+':'';
-          $('diff-summary-text').textContent=`${sign}${diffData.score_diff}점 변동 (이전 ${diffData.previous_score}점/${diffData.previous_grade||'보류'} → 현재 ${diffData.current_score}점/${diffData.current_grade||'보류'})`;
+          $('diff-summary-text').textContent=`${sign}${diffData.score_diff}점 변동 (이전 ${diffData.previous_score}점/${diffData.previous_finding_grade||diffData.previous_grade||'보류'} → 현재 ${diffData.current_score}점/${diffData.current_finding_grade||diffData.current_grade||'보류'})`;
           $('diff-chip-fixed').textContent=`이번에 미발견 ${diffData.fixed_count}건`;
           $('diff-chip-new').textContent=`신규 발생 ${diffData.new_count}건`;
           $('diff-chip-persistent').textContent=`유지 ${diffData.persistent_count}건`;
@@ -276,7 +244,7 @@ async function start(demo=false){
     return;
   }
   starting=true;error('');if($('finding-dialog').open)$('finding-dialog').close();
-  $('start').disabled=true;$('demo').disabled=true;$('scope-mode').disabled=true;if($('scan-mode'))$('scan-mode').disabled=true;$('scan-state').dataset.state='running';$('status').textContent='진단 중';if(snapshot)renderStatus();
+  $('start').disabled=true;$('scope-mode').disabled=true;if($('scan-mode'))$('scan-mode').disabled=true;$('scan-state').dataset.state='running';$('status').textContent='진단 중';if(snapshot)renderStatus();
   try{
     const target=demo?'http://127.0.0.1:8989':$('target').value.trim();
     const scopeMode=demo?'path':$('scope-mode').value;const mode=demo?'safe':($('scan-mode')?.value||'safe');
@@ -287,12 +255,12 @@ async function start(demo=false){
       try{profile=JSON.parse(await file.text());}catch(_){throw new Error('JSON 프로필 형식을 확인하세요.');}
       if(!profile||Array.isArray(profile)||typeof profile!=='object')throw new Error('프로필은 JSON 객체여야 합니다.');
     }
-    const options=demo?{}:{...profile,sql:$('option-sql').checked,xss:$('option-browser').checked,browser:$('option-browser').checked,max_requests:Number($('option-limit').value),parameters:$('option-params').value.split(',').map(s=>s.trim()).filter(Boolean)};
+    const options=demo?{}:{...profile,sql:$('option-sql').checked,sql_common_parameters:$('option-common').checked,exposure:$('option-exposure').checked,xss:$('option-browser').checked,browser:$('option-browser').checked,max_requests:Number($('option-limit').value),parameters:$('option-params').value.split(',').map(s=>s.trim()).filter(Boolean)};
     const result=await post('/api/scan/start',{target_url:target,demo,scope_mode:scopeMode,mode,consent,options});
     selected=null;findings=[];chains=[];endpoints=[];logs=[];surface={};diffData=null;renderKey='';$('save-result').textContent='진단 완료 후 저장 가능';
     if($('diff-banner'))$('diff-banner').hidden=true;
     snapshot={...snapshot,status:'running',scan_id:result.scan_id,target_url:result.target_url,scope_mode:result.scope_mode,mode:result.mode||mode,demo,findings_count:0,chains_count:0,endpoints_count:0,phase:0,started_at:new Date().toISOString(),finished_at:null,error:'',log_path:''};renderStatus();renderAll();await refresh(true);
-  }catch(exc){error(exc.message);}finally{starting=false;if(snapshot)renderStatus();else{$('start').disabled=false;$('demo').disabled=false;$('scope-mode').disabled=false;if($('scan-mode'))$('scan-mode').disabled=false;$('scan-phases').hidden=true;$('scan-state').dataset.state='idle';$('status').textContent='진단 대기';}}
+  }catch(exc){error(exc.message);}finally{starting=false;if(snapshot)renderStatus();else{$('start').disabled=false;$('scope-mode').disabled=false;if($('scan-mode'))$('scan-mode').disabled=false;$('scan-phases').hidden=true;$('scan-state').dataset.state='idle';$('status').textContent='진단 대기';}}
 }
 async function saveSelected(event){
   event.preventDefault();if(exporting)return;const sections=[...$('export-sections').querySelectorAll('input:checked')].map(n=>n.value);if(!sections.length)return;
@@ -303,7 +271,7 @@ async function saveSelected(event){
     const filename='WVA_'+snapshot.scan_id+'.'+format;const url=URL.createObjectURL(await response.blob());const link=el('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('save-result').textContent=filename+' 저장 요청 완료';
   }catch(exc){error(exc.message);}finally{exporting=false;updateExport();}
 }
-$('scan-form').addEventListener('submit',event=>{event.preventDefault();start(false);});$('demo').addEventListener('click',()=>start(true));
+$('scan-form').addEventListener('submit',event=>{event.preventDefault();start(false);});
 $('stop').addEventListener('click',async()=>{if(starting||stopping)return;stopping=true;renderStatus();try{await post('/api/scan/stop');await refresh(true);}catch(exc){error(exc.message);}finally{stopping=false;renderStatus();}});
 $('search').addEventListener('input',renderFindings);$('severity').addEventListener('change',renderFindings);$('endpoint-search').addEventListener('input',renderEndpoints);
 $('go-save').addEventListener('click',()=>setView('save'));for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>setView(b.dataset.view));
@@ -321,14 +289,16 @@ const retestBtn=$('retest-finding-btn');
 if(retestBtn){
   retestBtn.addEventListener('click',async()=>{
     if(!selected)return;
+    const requestedFinding=selected,requestedScan=snapshot?.scan_id;
     const badge=$('retest-result-badge');
     retestBtn.disabled=true;
     if(badge){badge.hidden=false;badge.className='retest-badge testing';badge.textContent='재검증 중…';}
     try{
-      const res=await post('/api/finding/retest',{finding_id:selected});
+      const res=await post('/api/finding/retest',{finding_id:requestedFinding,scan_id:requestedScan});
+      if(selected!==requestedFinding||snapshot?.scan_id!==requestedScan)return;
       if(badge){
-        badge.className='retest-badge '+(res.status==='FIXED'?'fixed':res.status==='STILL_VULNERABLE'?'vulnerable':'error');
-        badge.textContent=(res.status==='FIXED'?'조치 완료 (FIXED)':res.status==='STILL_VULNERABLE'?'취약점 존속 (VULNERABLE)':'검증 오류')+': '+res.message;
+        badge.className='retest-badge '+(res.status==='NOT_REPRODUCED'?'fixed':res.status==='STILL_VULNERABLE'?'vulnerable':'error');
+        badge.textContent=(res.status==='NOT_REPRODUCED'?'이번 대조에서 미재현':res.status==='STILL_VULNERABLE'?'다시 확인됨':res.status==='NOT_VERIFIABLE'?'개별 검증 미지원':res.status==='INCONCLUSIVE'?'판정 보류':'검증 오류')+': '+res.message;
       }
     }catch(e){
       if(badge){badge.className='retest-badge error';badge.textContent='오류: '+e.message;}
@@ -337,3 +307,36 @@ if(retestBtn){
     }
   });
 }
+
+function renderAttackGraph(){
+  const host=$('chains-graph');if(!host)return;
+  if(!chains.length){host.replaceChildren(el('p','empty-text','연결된 체인 0건'));return;}
+  const stepWidth=280,pitch=350,rowHeight=180;
+  const width=Math.max(680,...chains.map(c=>c.steps.length*pitch+30)),height=Math.max(360,chains.length*rowHeight+40);
+  const chart=svg('svg',{viewBox:`0 0 ${width} ${height}`,class:'dag-svg',role:'group','aria-label':'취약점 체인 공격 그래프','data-width':width,'data-height':height});
+  const defs=svg('defs');const marker=svg('marker',{id:'dag-arrow',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto'});marker.append(svg('path',{d:'M0 0 L10 5 L0 10 Z',class:'dag-edge-arrow'}));defs.append(marker);chart.append(defs);
+  for(const [row,chain]of chains.entries()){
+    const y=40+row*rowHeight;
+    for(const [index,step]of chain.steps.entries()){
+      const x=24+index*pitch,f=findings.find(f=>f.id===step.finding_id),title=f?label(f):step.action_description;
+      if(index)chart.append(svg('line',{x1:x-pitch+stepWidth,y1:y+60,x2:x-10,y2:y+60,class:'dag-edge','marker-end':'url(#dag-arrow)'}));
+      const group=svg('g',{role:'button',tabindex:0,'aria-label':title+' 상세 보기',class:'dag-button'});
+      group.append(svg('title',{},title+' · '+(f?.endpoint||'')),svg('rect',{x,y,width:stepWidth,height:120,class:'dag-node dag-node-active'}),svg('text',{x:x+18,y:y+27,class:'dag-text-sub'},step.step_number+'단계 · '+(severityNames[f?.severity]||'')));
+      const chunks=title.match(/.{1,17}/gu)||[title];chunks.slice(0,2).forEach((text,i)=>group.append(svg('text',{x:x+18,y:y+54+i*23,class:'dag-text-title'},text+(i===1&&chunks.length>2?'…':''))));
+      const path=f?.endpoint||step.finding_id;group.append(svg('text',{x:x+18,y:y+105,class:'dag-text-sub'},path.length>29?path.slice(0,28)+'…':path));
+      group.addEventListener('click',()=>openFinding(step.finding_id));group.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openFinding(step.finding_id);}});chart.append(group);
+    }
+  }
+  host.replaceChildren(chart);applyGraphZoom();
+}
+function applyGraphZoom(){const graph=$('chains-graph').querySelector('svg');$('graph-zoom').textContent=Math.round(graphZoom*100)+'%';if(graph){graph.style.width=Number(graph.dataset.width)*graphZoom+'px';graph.style.height=Number(graph.dataset.height)*graphZoom+'px';}}
+$('graph-zoom-in').addEventListener('click',()=>{graphZoom=Math.min(2,graphZoom+.25);applyGraphZoom();});
+$('graph-zoom-out').addEventListener('click',()=>{graphZoom=Math.max(.75,graphZoom-.25);applyGraphZoom();});
+$('graph-fit').addEventListener('click',()=>{const graph=$('chains-graph').querySelector('svg');graphZoom=graph?Math.max(.75,Math.min(1.5,$('chains-graph').parentElement.clientWidth/Number(graph.dataset.width))):1;applyGraphZoom();});
+$('graph-fullscreen').addEventListener('click',async()=>{const panel=$('chains-graph').closest('.panel');try{if(document.fullscreenElement)await document.exitFullscreen();else await panel.requestFullscreen();}catch(_){panel.classList.toggle('graph-expanded');$('graph-fullscreen').textContent=panel.classList.contains('graph-expanded')?'원래 크기':'크게 보기';}});
+for(const button of document.querySelectorAll('[data-params]'))button.addEventListener('click',()=>{$('option-params').value=button.dataset.params;});
+$('option-profile').addEventListener('change',()=>{$('profile-selection').textContent=$('option-profile').files[0]?'선택한 프로필: '+$('option-profile').files[0].name:'프로필 없음 · 미인증 검사';});
+$('download-profile-template').addEventListener('click',()=>{const data={primary_session:'account_a',sessions:[{alias:'account_a',headers:{Authorization:'Bearer REPLACE_WITH_TEST_TOKEN'}}]};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=el('a');link.href=url;link.download='wva-account-profile.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+
+document.addEventListener('fullscreenchange',()=>{$('graph-fullscreen').textContent=document.fullscreenElement?'원래 크기':'크게 보기';});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){const expanded=document.querySelector('.graph-expanded');if(expanded){expanded.classList.remove('graph-expanded');$('graph-fullscreen').textContent='크게 보기';}}});

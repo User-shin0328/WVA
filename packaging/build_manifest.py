@@ -33,7 +33,7 @@ def create():
           'source_base_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
           'source_worktree_dirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT)),
           'source_files':sources(),'validation_status':'NOT_RUN','default_port':9030,
-          'test_guide':'tests/TEST_GUIDE.md','implementation_report':'docs/RELIABILITY_UPGRADE_2.6.md',
+          'test_guide':'tests/TEST_GUIDE.md','implementation_report':'docs/WORKFLOW_UPGRADE_2.7.md',
           'browser_runtime':'Playwright 1.64.1 bundled; installed Edge/Chrome or Playwright Chromium required'}
     MANIFEST.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     return data

@@ -3,7 +3,7 @@ import argparse
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 import uvicorn
-from mock_target import app as vulnerable_app
+from tests.lab.baseline_target import app as vulnerable_app
 
 def hardened_app():
     app = FastAPI(title="WVA defended lab", docs_url=None, redoc_url=None, openapi_url=None)

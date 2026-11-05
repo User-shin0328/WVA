@@ -41,7 +41,7 @@ def executable(base,options):
         try:
             for _ in range(200):
                 try:
-                    if client.get('/api/health').json().get('version')=='2.6.0':break
+                    if client.get('/api/health').json().get('version')=='2.7.0':break
                 except httpx.HTTPError:pass
                 time.sleep(.1)
             else:raise RuntimeError('Frozen service did not start')

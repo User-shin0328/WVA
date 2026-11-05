@@ -19,16 +19,16 @@ def port():
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--exe',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--exe',action='store_true');parser.add_argument('--workflow',action='store_true');args=parser.parse_args()
     dashboard_port,lab_port=port(),port()
-    data=ROOT/'tests/artifacts/reliability-2.6/ui-data';data.mkdir(parents=True,exist_ok=True)
+    data=ROOT/'tests/artifacts/upgrade-2.7/ui-data';data.mkdir(parents=True,exist_ok=True)
     node=Path(os.environ['USERPROFILE'])/'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe'
     if os.environ.get('WVA_NODE'):node=Path(os.environ['WVA_NODE'])
     base=f'http://127.0.0.1:{dashboard_port}'
     command=[str(ROOT/'WVA.exe')] if args.exe else [sys.executable,str(ROOT/'launcher.py')]
     hidden={'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}
     service=subprocess.Popen(command+['--no-browser','--port',str(dashboard_port),'--data-dir',str(data)],cwd=ROOT,**hidden)
-    lab=subprocess.Popen([sys.executable,'-m','tests.lab.target','--port',str(lab_port)],cwd=ROOT,**hidden)
+    lab=subprocess.Popen([sys.executable,'-m','tests.lab.workflow_target' if args.workflow else 'tests.lab.target','--port',str(lab_port)],cwd=ROOT,**hidden)
     try:
         with httpx.Client(trust_env=False,timeout=2) as client:
             for _ in range(200):
@@ -38,8 +38,8 @@ def main():
                 time.sleep(.1)
             else:raise RuntimeError('Temporary UI/lab services did not start')
         env={**os.environ,'WVA_TEST_URL':base,'WVA_LAB_URL':f'http://127.0.0.1:{lab_port}'}
-        completed=subprocess.run([str(node),str(ROOT/'tests/ui_check.cjs')],cwd=ROOT,env=env,timeout=240,**hidden)
-        output=ROOT/'tests/artifacts/browser/result.json'
+        completed=subprocess.run([str(node),str(ROOT/('tests/ui_workflow.cjs' if args.workflow else 'tests/ui_check.cjs'))],cwd=ROOT,env=env,timeout=240,**hidden)
+        output=ROOT/('tests/artifacts/upgrade-2.7/browser/result.json' if args.workflow else 'tests/artifacts/browser/result.json')
         if output.exists():
             result=json.loads(output.read_text(encoding='utf-8'))
             result['runner_mode']='executable' if args.exe else 'source'

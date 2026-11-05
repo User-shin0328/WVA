@@ -24,6 +24,7 @@ class VulnerabilityAnalysisEngine:
         self.options=options if isinstance(options,ScanOptions) else ScanOptions(**(options or {}))
         self.budget=RequestBudget(self.governance,self.options)
         required=['BASE','IO']
+        if self.options.exposure:required.extend(['R21','R22','R23'])
         if self.options.sql:required.append('R11')
         if self.options.xss and self.options.browser:required.append('R12')
         required += ['R09' if c.kind=='object' else 'R10' for c in self.options.access_cases]
@@ -70,6 +71,10 @@ class VulnerabilityAnalysisEngine:
             config_auditor = ConfigAndHeaderAuditor(self.blackboard, self.governance)
             await config_auditor.audit(client)
             record(self.blackboard,'BASE','헤더·쿠키·CORS·정보 노출','FINDING' if self.blackboard.findings else 'PASS','실제로 측정한 응답에 대한 기존 규칙 결과입니다.',len(self.blackboard.asset.endpoints),len(self.blackboard.findings))
+            if self.options.exposure:
+                from agents.exposure_auditor import ExposureAuditor
+                async with self.budget.client() as anonymous:
+                    await ExposureAuditor(self.blackboard,self.governance).audit(anonymous)
 
             # 3. Access Control & BOLA Auditor
             self.blackboard.log("[Phase 3] Access Control & BOLA Differential Audit")

@@ -156,6 +156,13 @@ PROFILES.update({
 })
 
 def risk_context(data, rule_key):
+    if rule_key=='PUBLIC_CONFIGURATION':
+        return {'summary':data.get('title','비공개 설정 자료의 외부 노출'),
+                'observation':'미인증 응답의 자료 형식을 반복 확인하고 무관한 경로의 응답과 구분했습니다. 민감 값 원문은 보고서에 저장하지 않았습니다.',
+                'assessment':'설정·저장소·관리 응답 노출 확인',
+                'attacks':[{'name':'내부 정보와 노출 키를 이용한 후속 접근','scenario':'내부 구조를 이용해 추가 접근 경로를 찾거나, 노출 값이 유효한 키이면 그 키에 허용된 응답에 접근할 수 있습니다.',
+                            'conditions':['응답 자료가 실제 비공개 설정이어야 합니다.','키 재사용에는 실제 유효한 키와 해당 키를 허용하는 별도 기능이 필요합니다.']}],
+                'limits':['설정 자료의 응답 노출을 확인했습니다. 전체 저장소·운영 데이터는 수집하지 않았습니다.','키 사용이나 서버 장악은 별도로 검증하지 않았습니다.'],'references':[]}
     profile = PROFILES.get(rule_key)
     if profile:
         return deepcopy(profile)
