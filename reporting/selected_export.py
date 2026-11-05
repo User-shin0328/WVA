@@ -29,7 +29,69 @@ def ordered_action_text(details, fallback=""):
         return "\n\n".join(f"{s['order']}. {s['title']}\n조치: {s['action']}\n완료 기준: {s['expected_result']}" for s in details["steps"])
     return "\n".join(f"{i}. {action}" for i, action in enumerate(details.get("actions", []), 1)) or fallback
 
+
+def render_sarif(payload):
+    meta = payload.get("metadata", {})
+    findings = payload.get("findings", [])
+    if isinstance(findings, dict):
+        findings = [findings]
+
+    rules = []
+    results = []
+    seen_rules = set()
+
+    for f in findings:
+        rule_id = f.get("cwe_id") or f.get("vuln_type") or "WVA-RULE"
+        if rule_id not in seen_rules:
+            seen_rules.add(rule_id)
+            rules.append({
+                "id": rule_id,
+                "name": f.get("vuln_type", "Vulnerability"),
+                "shortDescription": {"text": f.get("title", rule_id)},
+                "fullDescription": {"text": f.get("description", "")},
+                "help": {"text": f.get("remediation", "")},
+                "properties": {
+                    "cwe": f.get("cwe_id", ""),
+                    "kisa": f.get("kisa_id", ""),
+                    "cvss": f.get("cvss_score", 0.0)
+                }
+            })
+
+        sev = (f.get("severity") or "LOW").upper()
+        level = "error" if sev in ("CRITICAL", "HIGH") else "warning" if sev == "MEDIUM" else "note"
+        url = f.get("request_url") or f.get("endpoint") or "/"
+
+        results.append({
+            "ruleId": rule_id,
+            "level": level,
+            "message": {"text": f"{f.get('title')}: {f.get('evidence', '')}"},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": url}
+                }
+            }]
+        })
+
+    sarif = {
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "WVA",
+                    "version": "2.6.0",
+                    "informationUri": "https://github.com/User-shin0328/WVA",
+                    "rules": rules
+                }
+            },
+            "results": results
+        }]
+    }
+    return json.dumps(sarif, ensure_ascii=False, indent=2), "application/sarif+json", "sarif"
+
 def render_export(payload, format):
+    if format == "sarif":
+        return render_sarif(payload)
     if format == "json":
         return json.dumps(payload, ensure_ascii=False, indent=2), "application/json", "json"
     if format == "csv":

@@ -4,7 +4,7 @@
 > (Web Vulnerability Auditor & Attack Path Chaining Agent)
 
 [![Version](https://img.shields.io/badge/version-v2.6.0-blue.svg)](docs/BUILD_INFO.json)
-[![Tests](https://img.shields.io/badge/tests-173%2F173%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
+[![Tests](https://img.shields.io/badge/tests-180%2F180%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
 [![Smoke Test](https://img.shields.io/badge/smoke%20test-27%2F27%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg)](WVA.exe)
 
@@ -24,6 +24,8 @@
    - OS 시스템 명령어 삽입 (Command Injection / RCE, `R17`)
    - 서버 측 요청 위조 (Server-Side Request Forgery - SSRF, `R18`)
    - 위험 확장자 임의 파일 업로드 (Arbitrary File Upload, `R19`)
+   - 오픈 리다이렉트 (Open Redirect / CWE-601, `R20`)
+   - JWT 보안 점검 (`alg: none`, `exp` 누락) 및 CORS `Origin: null` 비인가 신뢰 감사
    - 보안 헤더(CSP, HSTS) 누락, 쿠키 플래그 결여, CORS Origin 반사, 디버그 엔드포인트 정보 노출, 클라이언트 JS 시크릿 패턴, TLS 인증서 만료 임박 점검(`BASE`)
    - 계정·역할별 비공개 객체 접근 정책 대조 (`R09`, `R10`), 저장형 XSS 정리 완결성 (`R12-S`), 시간 기반 SQLi (`R11-T`)
 2. **유동적 이원화 진단 모드 (`safe` vs `deep`)**:
@@ -52,7 +54,8 @@
    - **진단 모드**: `운영 안전 모드 (Safe DAST)` / `심화 모드 (Deep DAST) (Deep DAST)`
 5. **진단 시작** 버튼을 클릭하면 실시간 프로그레스 모션과 함께 진단이 진행됩니다.
 6. 진단 완료 후 위험도 차트, 상세 표, 다단계 공격 체인, 단계별 조치 가이드를 확인합니다.
-7. **저장** 메뉴에서 원하는 항목과 포맷(**JSON / Markdown / CSV**)을 선택하여 보고서를 다운로드합니다.
+7. **저장** 메뉴에서 원하는 항목과 포맷(**JSON / Markdown / CSV / SARIF v2.1.0**)을 선택하여 보고서를 다운로드합니다.
+   - 발견 항목 상세 팝업에서 **[취약점 재검증]** 버튼을 통해 패치 여부를 1-Click으로 즉각 판정할 수 있습니다.
 8. 작업 완료 시 **앱 종료** 버튼을 눌러 백그라운드 서버를 완전히 종료합니다.
 
 ### 포트 변경 및 옵션 실행

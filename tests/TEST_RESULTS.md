@@ -5,13 +5,20 @@
 - 보고서 갱신 시각: 2026-11-04T16:28:38+09:00
 - 운영체제: Windows-10-10.0.19045-SP0
 - Python: 3.12.14
-- 기능 테스트: **172/172 PASS**
+- 기능 테스트: **180/180 PASS**
 - 외부 운영 사이트 진단은 수행하지 않았습니다. 로컬 실습 환경에 대한 검증입니다.
 
 ### 기능 테스트 상세 결과
 
 | 실제 테스트 | 결과 | 소요 |
 | --- | --- | ---: |
+| `test_kisa_web_mapping` | PASS | 0.005초 |
+| `test_sarif_export_rendering` | PASS | 0.006초 |
+| `test_jwt_inspection_alg_none_and_missing_exp` | PASS | 0.008초 |
+| `test_cors_origin_null_audit` | PASS | 0.012초 |
+| `test_system_auditor_auto_probe_open_redirect` | PASS | 0.015초 |
+| `test_waf_detection_and_adaptive_delay` | PASS | 0.003초 |
+| `test_retest_endpoint` | PASS | 0.045초 |
 | `test_sql_actual_sqlite_and_negative_conditions[sql-True-FINDING]` | PASS | 1.455초 |
 | `test_sql_actual_sqlite_and_negative_conditions[safe-sql-False-PASS]` | PASS | 2.114초 |
 | `test_sql_actual_sqlite_and_negative_conditions[unstable-False-SIGNAL]` | PASS | 1.077초 |

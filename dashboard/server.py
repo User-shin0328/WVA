@@ -9,6 +9,7 @@ from pathlib import Path
 import uuid
 import re
 from typing import Literal
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -328,6 +329,7 @@ async def get_status():
             "findings_count": len(findings), "chains_count": len(bb.chains) if bb else 0,
             "severity": severity, "score": score, "grade": grade, "checks":checks,"assessment_complete":state.status=='completed' and bool(checks) and not pending,
             "assessment_note":'전체 사이트 안전 등급이 아닌 발견 항목 기준 점수입니다.' if not pending else '판정 보류: '+', '.join(pending),
+            "waf_detected": bool(bb.asset.metadata.get("waf_detected", False)) if bb else False,
             "error": state.last_error, "scan_id": state.scan_id,
             "started_at": state.started_at, "finished_at": state.finished_at,
             "demo": state.demo, "report_paths": state.report_paths,
@@ -425,7 +427,7 @@ async def surface_summary():
 
 class ExportRequest(BaseModel):
     sections: list[Literal["summary", "findings", "chains", "endpoints", "logs"]] = Field(min_length=1, max_length=5)
-    format: Literal["json", "md", "csv"]
+    format: Literal["json", "md", "csv", "sarif"]
     scan_id: str
 
     @field_validator("sections")
@@ -493,3 +495,57 @@ def start_server(host="127.0.0.1", port=9030):
 
 if __name__ == "__main__":
     start_server()
+
+
+class RetestRequest(BaseModel):
+    finding_id: str
+
+@app.post("/api/finding/retest")
+async def retest_finding(req: RetestRequest):
+    if not state.blackboard:
+        raise HTTPException(400, "진단 데이터가 없습니다. 먼저 진단을 실행하세요.")
+    finding = state.blackboard.findings.get(req.finding_id) or next((f for f in state.blackboard.get_findings_list() if f.id == req.finding_id), None)
+    if not finding:
+        raise HTTPException(404, f"해당 취약점({req.finding_id})을 찾을 수 없습니다.")
+
+    async with httpx.AsyncClient(timeout=6.0, follow_redirects=False, verify=False) as client:
+        try:
+            target_url = finding.request_url or (state.target_url.rstrip("/") + finding.endpoint)
+            # 1. Header checks
+            if finding.vuln_type == VulnerabilityType.MISSING_SECURITY_HEADER:
+                res = await client.get(target_url)
+                hdrs = [k.lower() for k in res.headers]
+                if "content-security-policy" in hdrs or "strict-transport-security" in hdrs:
+                    return {"status": "FIXED", "finding_id": finding.id, "message": "보안 헤더가 정상적으로 추가되었습니다."}
+                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "보안 헤더가 여전히 누락되어 있습니다."}
+
+            # 2. CORS checks
+            if finding.vuln_type == VulnerabilityType.CORS_MISCONFIGURATION:
+                res = await client.get(target_url, headers={"Origin": "https://evil.com"})
+                acao = res.headers.get("access-control-allow-origin")
+                if acao != "https://evil.com":
+                    return {"status": "FIXED", "finding_id": finding.id, "message": "임의 Origin 반사가 차단되었습니다."}
+                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "임의 Origin이 여전히 허용됩니다."}
+
+            # 3. SQL Injection checks
+            if finding.vuln_type == VulnerabilityType.SQL_INJECTION:
+                res = await client.get(target_url)
+                if "SQL_INJECTION_PWNED" not in res.text and "SQLSTATE" not in res.text and "syntax error" not in res.text.lower():
+                    return {"status": "FIXED", "finding_id": finding.id, "message": "SQL 인젝션 실행 및 오류 시그니처가 차단되었습니다."}
+                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "SQL 인젝션 취약점이 여전히 관찰됩니다."}
+
+            # 4. Open Redirect
+            if finding.vuln_type == VulnerabilityType.OPEN_REDIRECT:
+                res = await client.get(target_url)
+                loc = res.headers.get("location", "")
+                if not loc.startswith("https://example.com") and not loc.startswith("//example.com"):
+                    return {"status": "FIXED", "finding_id": finding.id, "message": "외부 도메인 리다이렉트가 차단되었습니다."}
+                return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "외부 도메인 리다이렉트가 여전히 허용됩니다."}
+
+            # 5. Generic check
+            res = await client.get(target_url)
+            if res.status_code in (401, 403, 404):
+                return {"status": "FIXED", "finding_id": finding.id, "message": f"접근이 제한되었습니다 (HTTP {res.status_code})."}
+            return {"status": "STILL_VULNERABLE", "finding_id": finding.id, "message": "엔드포인트가 여전히 접근 가능하며 조치가 확인되지 않았습니다."}
+        except Exception as exc:
+            return {"status": "ERROR", "finding_id": finding.id, "message": f"재검증 요청 실패: {exc}"}

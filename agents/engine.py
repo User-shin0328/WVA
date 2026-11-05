@@ -41,6 +41,7 @@ class VulnerabilityAnalysisEngine:
         self.blackboard.log(f"=== Starting Security Assessment against: {self.target_url} ===")
         
         self.blackboard.asset.metadata['checks']=[]
+        self.blackboard.asset.metadata['waf_detected']=getattr(self.budget, 'waf_detected', False)
         auth={}
         profile=None
         if self.options.primary_session:
@@ -97,6 +98,7 @@ class VulnerabilityAnalysisEngine:
 
         self.blackboard.log(f"=== Security Assessment Complete. Total Findings: {len(self.blackboard.findings)}, Chains: {len(self.blackboard.chains)} ===")
         self.blackboard.asset.metadata['request_budget']={'used':self.budget.count,'limit':self.options.max_requests,'max_response_bytes':self.options.max_response_bytes,'blocked':self.budget.blocked}
+        self.blackboard.asset.metadata['waf_detected']=getattr(self.budget, 'waf_detected', False)
         record(self.blackboard,'IO','요청 경계·응답 수신 완료','ERROR' if self.budget.failures else 'PASS',
                f'요청 {self.budget.count}회, 수신·한도·경계 오류 {self.budget.failures}회.',self.budget.count,errors=self.budget.failures)
         return self.blackboard

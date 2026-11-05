@@ -13,7 +13,11 @@ class ResourceLimit(ValueError):
 class BoundedClient(httpx.AsyncClient):
     async def send(self, request, **kwargs):
         try:
-            return await super().send(request, **kwargs)
+            resp = await super().send(request, **kwargs)
+            if resp.status_code == 429 or any(h in resp.headers for h in ('cf-ray', 'x-amzn-waf')) or 'waf' in resp.headers.get('server', '').lower():
+                self._wva_budget.waf_detected = True
+                self._wva_budget.adaptive_delay = min(self._wva_budget.adaptive_delay + 0.05, 0.5)
+            return resp
         except (httpx.HTTPError, ValueError):
             self._wva_budget.failures += 1
             raise
@@ -59,6 +63,8 @@ class RequestBudget:
         self.last_request=0
         self.blocked=0
         self.failures=0
+        self.waf_detected=False
+        self.adaptive_delay=0.0
 
     def allow_post(self, url):
         if not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(urlsplit(url).path):
@@ -82,7 +88,7 @@ class RequestBudget:
             if self.count>=self.options.max_requests:
                 raise ResourceLimit('전체 진단 요청 예산을 소진했습니다.')
             loop=asyncio.get_running_loop()
-            interval = .025
+            interval = (.005 if getattr(self.options, 'mode', 'safe') == 'deep' else .025) + self.adaptive_delay
             await asyncio.sleep(max(0, interval - (loop.time() - self.last_request)))
             self.last_request=loop.time()
             self.count+=1

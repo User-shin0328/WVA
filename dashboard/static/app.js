@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const severityNames = {CRITICAL:'심각',HIGH:'높음',MEDIUM:'중간',LOW:'낮음',INFO:'정보'};
 const severityRank = {CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
-const typeNames = {MISSING_SECURITY_HEADER:'보안 헤더 누락',EXPOSED_DEBUG_ENDPOINT:'디버그 정보 노출',INFO_DISCLOSURE:'민감 정보 노출',BOLA_IDOR:'객체 접근 통제 누락',PRIVILEGE_ESCALATION:'유출 키로 관리자 응답 접근',CORS_MISCONFIGURATION:'외부 출처 접근 허용',COOKIE_SECURITY_FLAG:'쿠키 보안 속성 누락',AUTH_BYPASS:'인증 우회',PARAMETER_REFLECTION:'입력값 반사',SECRET_LEAK:'클라이언트 스크립트 시크릿 노출',TLS_EXPIRING:'SSL/TLS 인증서 만료 임박',PATH_TRAVERSAL:'경로 조작 및 시스템 파일 접근 (Path Traversal / LFI)',COMMAND_INJECTION:'OS 시스템 명령어 삽입 (Command Injection / RCE)',SSRF:'서버 측 요청 위조 (SSRF)',ARBITRARY_FILE_UPLOAD:'위험 확장자 파일 무제한 업로드 (Arbitrary File Upload)',SQL_INJECTION:'SQL 주입 (SQL Injection)'};
+const typeNames = {MISSING_SECURITY_HEADER:'보안 헤더 누락',EXPOSED_DEBUG_ENDPOINT:'디버그 정보 노출',INFO_DISCLOSURE:'민감 정보 노출',BOLA_IDOR:'객체 접근 통제 누락',PRIVILEGE_ESCALATION:'유출 키로 관리자 응답 접근',CORS_MISCONFIGURATION:'외부 출처 접근 허용',COOKIE_SECURITY_FLAG:'쿠키 보안 속성 누락',AUTH_BYPASS:'인증 우회',PARAMETER_REFLECTION:'입력값 반사',SECRET_LEAK:'클라이언트 스크립트 시크릿 노출',TLS_EXPIRING:'SSL/TLS 인증서 만료 임박',PATH_TRAVERSAL:'경로 조작 및 시스템 파일 접근 (Path Traversal / LFI)',COMMAND_INJECTION:'OS 시스템 명령어 삽입 (Command Injection / RCE)',SSRF:'서버 측 요청 위조 (SSRF)',ARBITRARY_FILE_UPLOAD:'위험 확장자 파일 무제한 업로드 (Arbitrary File Upload)',SQL_INJECTION:'SQL 주입 (SQL Injection)',OPEN_REDIRECT:'오픈 리다이렉트 (Open Redirect)'};
 const statusNames = {idle:'진단 대기',running:'진단 중',completed:'진단 완료',stopped:'진단 중단 · 부분 결과',error:'진단 실패'};
 const views = {overview:'웹 대상 진단',chains:'취약점 연계 경로',endpoints:'공격 표면',logs:'진단 로그',save:'정보 저장'};
 const exportNames = {summary:'진단 요약',findings:'발견 항목',chains:'연계 경로',endpoints:'공격 표면',logs:'진단 로그'};
@@ -55,6 +55,7 @@ function renderStatus(){
   const phase=starting?0:(s.phase||0);$('scan-phases').replaceChildren(...phases.map((name,index)=>{const item=el('li',index<phase?'done':index===phase&&running?'current':'',name);if(index===phase&&running)item.setAttribute('aria-current','step');return item;}));
   for(const n of document.querySelectorAll('.current-target'))n.textContent=s.target_url||'—';
   $('scan-log-path').textContent=s.log_path||'—';$('app-log-path').textContent=s.app_log_path||'—';$('log-error').textContent=s.log_error||'';$('log-error').hidden=!s.log_error;$('save-scan-id').textContent=s.scan_id||'';
+  const wafBanner=$('waf-banner');if(wafBanner)wafBanner.hidden=!s.waf_detected;
   if(s.error)error(s.error);updateExport();
 }
 const checkNames={PASS:'확인 완료',FINDING:'발견',SIGNAL:'판정 보류',NOT_RUN:'미실행',ERROR:'오류',NOT_SUPPORTED:'미지원'};
@@ -100,7 +101,7 @@ function createFindingRow(f){
   if(diffData?.new_ids?.includes(f.id)){
     button.append(el('span','badge-new','신규'));
   }
-  main.append(button,el('span','subline',f.cwe_id||'—'));
+  const sublineText=(f.kisa_id?'['+f.kisa_id+'] ':'')+(f.cwe_id||'—');main.append(button,el('span','subline',sublineText));
   const route=el('td');route.append(el('span','endpoint',f.endpoint),el('span','subline',f.method));
   const evidence=el('td');evidence.append(el('span','cell-summary',f.evidence));const action=el('td');action.append(el('span','cell-summary',f.remediation_details?.summary||f.remediation));
   row.append(severity,main,route,el('td','numeric score',Number.isFinite(f.cvss_score)?f.cvss_score.toFixed(1):'—'),evidence,action);return row;
@@ -113,6 +114,7 @@ function renderFindings(){
 function detailBlock(title){const section=el('section','detail-block');section.append(el('h3','',title));return section;}
 function openFinding(id){
   const f=findings.find(x=>x.id===id);if(!f)return;selected=id;
+  const rBadge=$('retest-result-badge');if(rBadge){rBadge.hidden=true;rBadge.textContent='';rBadge.className='retest-badge';}
   $('detail-title').textContent=label(f);$('detail-id').textContent=f.id;
   const risk=f.risk_context||{summary:f.remediation_details?.impact||f.description,observation:'관찰 증거 원문을 확인하세요.',assessment:'추가 검토 필요',attacks:[],limits:[],references:[]};
   const overview=detailBlock('문제 요약');overview.classList.add('detail-overview');overview.append(el('p','detail-lead',risk.summary));
@@ -133,7 +135,7 @@ function openFinding(id){
   actionsToggle.addEventListener('click',()=>{const expand=actionsToggle.getAttribute('aria-expanded')!=='true';for(const n of actions.querySelectorAll('details'))n.open=expand;updateToggle();});
   remediation.append(actions);
   const verify=detailBlock('수정 후 확인');const checks=el('ul');for(const check of f.remediation_details?.verification||[])checks.append(el('li','',check));verify.append(checks);
-  const original=el('details','detail-original');original.append(el('summary','','기술 정보 및 원문'),el('p','mono',f.id),el('p','mono','CWE: '+(f.cwe_id||'—')+' · '+f.method),el('p','',f.description),el('p','',f.remediation));
+  const original=el('details','detail-original');original.append(el('summary','','기술 정보 및 원문'),el('p','mono',f.id),el('p','mono',(f.kisa_id?'KISA: '+f.kisa_id+' · ':'')+'CWE: '+(f.cwe_id||'—')+' · '+f.method),el('p','',f.description),el('p','',f.remediation));
   for(const reference of risk.references){const p=el('p');const link=el('a','',reference.title);link.href=reference.url;link.target='_blank';link.rel='noopener noreferrer';p.append(link);original.append(p);}
   const contentItems=[overview,metrics,observed,attacks,limits,remediation,verify];
   const aiPrompt=f.ai_prompt||f.remediation_details?.ai_prompt;
@@ -148,6 +150,44 @@ function renderChains(){
     const steps=el('div','chain-steps');for(const step of chain.steps){const f=findings.find(x=>x.id===step.finding_id);const b=el('button','chain-step');b.type='button';b.setAttribute('aria-haspopup','dialog');b.append(el('span','step-number','STEP '+step.step_number),el('h3','',f?label(f):step.action_description),el('p','',f?.endpoint||step.finding_id));b.addEventListener('click',()=>openFinding(step.finding_id));steps.append(b);}
     article.append(header,steps);return article;
   });
+
+  const graphHost=$('chains-graph');
+  if(graphHost){
+    if(!chains.length){
+      graphHost.replaceChildren(el('p','empty-text','연계 경로 0건'));
+    }else{
+      const svgW=Math.max(680, chains.reduce((max,c)=>Math.max(max, c.steps.length*220+80), 680));
+      const svgH=chains.length*90+40;
+      const gSvg=svg('svg',{viewBox:`0 0 ${svgW} ${svgH}`,class:'dag-svg'});
+      const defs=svg('defs');
+      const marker=svg('marker',{id:'arrow',viewBox:'0 0 10 10',refX:'8',refY:'5',markerWidth:'6',markerHeight:'6',orient:'auto-start-reverse'});
+      marker.append(svg('path',{d:'M 0 1 L 10 5 L 0 9 z',class:'dag-edge-arrow'}));
+      defs.append(marker);
+      gSvg.append(defs);
+      chains.forEach((chain, cIdx)=>{
+        const y=45+cIdx*90;
+        chain.steps.forEach((step, sIdx)=>{
+          const x=30+sIdx*220;
+          const f=findings.find(x=>x.id===step.finding_id);
+          const fTitle=f?label(f):step.action_description;
+          const fTrunc=fTitle.length>18?fTitle.slice(0,17)+'…':fTitle;
+          const rect=svg('rect',{x,y:y-28,width:180,height:56,class:'dag-node'});
+          rect.style.cursor='pointer';
+          rect.addEventListener('click',()=>openFinding(step.finding_id));
+          const stepText=svg('text',{x:x+10,y:y-10,class:'dag-text-sub'},`STEP ${step.step_number}: ${step.finding_id}`);
+          const titleText=svg('text',{x:x+10,y:y+12,class:'dag-text-title'},fTrunc);
+          gSvg.append(rect,stepText,titleText);
+          if(sIdx>0){
+            const prevX=30+(sIdx-1)*220+180;
+            const line=svg('line',{x1:prevX,y1:y,x2:x-6,y2:y,class:'dag-edge','marker-end':'url(#arrow)'});
+            gSvg.append(line);
+          }
+        });
+      });
+      graphHost.replaceChildren(gSvg);
+    }
+  }
+
   if(!blocks.length)blocks.push(el('p','empty-text','연계 경로 0건'));$('chains-list').replaceChildren(...blocks);$('chain-count').textContent=chains.length+'건';
   const ids=new Set(chains.flatMap(c=>c.steps.map(s=>s.finding_id)));const related=findings.filter(f=>ids.has(f.id));$('related-body').replaceChildren(...related.map(createFindingRow));$('related-count').textContent=related.length+'건';$('related-empty').hidden=related.length>0;
 }
@@ -183,7 +223,7 @@ function renderLogs(){
 function initExport(){for(const [key,title]of Object.entries(exportNames)){const label=el('label');const input=el('input');input.type='checkbox';input.name='sections';input.value=key;input.checked=true;const count=el('small');count.id='export-count-'+key;label.append(input,el('span','',title),count);$('export-sections').append(label);}for(const input of $('export-form').querySelectorAll('input'))input.addEventListener('change',updateExport);}
 function updateExport(){
   const chosen=[...$('export-sections').querySelectorAll('input:checked')];const format=$('export-form').querySelector('input[name="format"]:checked')?.value||'json';
-  $('export-summary').textContent=chosen.length+'개 항목 · '+({json:'JSON',md:'Markdown',csv:'CSV'})[format];
+  $('export-summary').textContent=chosen.length+'개 항목 · '+({json:'JSON',md:'Markdown',csv:'CSV',sarif:'SARIF'})[format];
   const counts={summary:snapshot?.scan_id?1:0,findings:findings.length,chains:chains.length,endpoints:endpoints.length,logs:logs.length};for(const [key,count]of Object.entries(counts)){const n=$('export-count-'+key);if(n)n.textContent=count;}
   $('export-button').disabled=!chosen.length||snapshot?.status!=='completed'||exporting;
   if(!chosen.length)$('save-result').textContent='저장할 정보를 선택하세요.';else if(snapshot?.status!=='completed')$('save-result').textContent='진단 완료 후 저장 가능';else if($('save-result').textContent==='진단 완료 후 저장 가능'||$('save-result').textContent==='저장할 정보를 선택하세요.')$('save-result').textContent='';
@@ -275,3 +315,25 @@ window.addEventListener('hashchange',()=>setView(location.hash.slice(1),false));
 function updateConsentLabel(){const mode=$('scan-mode')?.value||'safe';const lbl=$('consent-label');if(!lbl)return;if(mode==='deep')lbl.textContent='대상 환경의 격리를 확인하였으며 심화 검사와 테스트 데이터 생성을 승인합니다';else lbl.textContent='소유하거나 진단 허가를 받은 대상입니다';}
 $('scan-mode')?.addEventListener('change',updateConsentLabel);updateConsentLabel();
 initExport();setView(location.hash.slice(1)||'overview',false);refresh(true);setInterval(()=>refresh(),700);setInterval(()=>{if(snapshot)$('elapsed').textContent=duration();},500);
+
+
+const retestBtn=$('retest-finding-btn');
+if(retestBtn){
+  retestBtn.addEventListener('click',async()=>{
+    if(!selected)return;
+    const badge=$('retest-result-badge');
+    retestBtn.disabled=true;
+    if(badge){badge.hidden=false;badge.className='retest-badge testing';badge.textContent='재검증 중…';}
+    try{
+      const res=await post('/api/finding/retest',{finding_id:selected});
+      if(badge){
+        badge.className='retest-badge '+(res.status==='FIXED'?'fixed':res.status==='STILL_VULNERABLE'?'vulnerable':'error');
+        badge.textContent=(res.status==='FIXED'?'조치 완료 (FIXED)':res.status==='STILL_VULNERABLE'?'취약점 존속 (VULNERABLE)':'검증 오류')+': '+res.message;
+      }
+    }catch(e){
+      if(badge){badge.className='retest-badge error';badge.textContent='오류: '+e.message;}
+    }finally{
+      retestBtn.disabled=false;
+    }
+  });
+}

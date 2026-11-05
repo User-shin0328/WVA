@@ -23,6 +23,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
             resp = await client.get(self.governance.target_base_url, timeout=5.0)
             self._audit_headers(resp, entry_path)
             self._audit_cookies(resp, entry_path)
+            self._inspect_jwt(resp.text, entry_path)
             await self._audit_cors(client, base_url, entry_path)
         except Exception as e:
             self.blackboard.log(f"[Auditor:Config] Base URL check failed: {e}")
@@ -42,6 +43,7 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                 d_resp = await client.get(url, timeout=5.0)
                 if d_resp.status_code == 200:
                     self._inspect_debug_response(d_resp, path)
+                    self._inspect_jwt(d_resp.text, path)
             except Exception:
                 continue
 
@@ -120,34 +122,36 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                 )
 
     async def _audit_cors(self, client: httpx.AsyncClient, base_url: str, endpoint: str, request_url=None):
-        test_origin = "https://evil-attacker.com"
+        test_origins = ["https://evil-attacker.com", "null"]
         try:
             url = request_url or self.governance.url_for_path(endpoint)
             if not self.governance.is_in_scope(url) or not self.governance.is_safe_endpoint(endpoint):
                 return
-            resp = await client.get(url, headers={"Origin": test_origin}, timeout=5.0)
-            acao = resp.headers.get("access-control-allow-origin")
-            acac = resp.headers.get("access-control-allow-credentials")
+            for test_origin in test_origins:
+                resp = await client.get(url, headers={"Origin": test_origin}, timeout=5.0)
+                acao = resp.headers.get("access-control-allow-origin")
+                acac = resp.headers.get("access-control-allow-credentials")
 
-            if acao == test_origin:
-                if acac and acac.lower() == "true":
+                if acao == test_origin and acac and acac.lower() == "true":
+                    null_tag = " (Null Origin Trust)" if test_origin == "null" else ""
                     self.blackboard.add_finding(
                         VulnerabilityFinding(
                             id=f"VULN-CORS-{endpoint.replace('/', '_')}",
                             vuln_type=VulnerabilityType.CORS_MISCONFIGURATION,
-                            title="Permissive CORS Origin Reflection",
-                            severity=Severity.MEDIUM,
+                            title=f"Permissive CORS Origin Reflection{null_tag}",
+                            severity=Severity.HIGH if test_origin == "null" else Severity.MEDIUM,
                             endpoint=endpoint,
                             request_url=str(resp.request.url),
-                            description=f"The application reflects arbitrary origin '{test_origin}' with Access-Control-Allow-Credentials: true, allowing cross-origin credentialed reads.",
-                            evidence=f"ACAO: {acao}, ACAC: {acac}",
+                            description=f"The application reflects '{test_origin}' with Access-Control-Allow-Credentials: true, allowing cross-origin credentialed reads.",
+                            evidence=f"ACAO: {acao}, ACAC: {acac}, Origin: {test_origin}",
                             cwe_id="CWE-346",
-                            cvss_score=6.5,
+                            cvss_score=7.5 if test_origin == "null" else 6.5,
                             required_preconditions={"privilege": "unauthenticated"},
                             yielded_postconditions={"cors_leak_possible": True},
-                            remediation="Implement strict origin allowlists and never reflect arbitrary origins with credentials."
+                            remediation="Implement strict origin allowlists and never reflect arbitrary or null origins with credentials."
                         )
                     )
+                    break
         except Exception:
             pass
 
@@ -293,3 +297,51 @@ class ConfigAndHeaderAuditor(BaseAuditor):
                             await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
             except Exception:
                 pass
+
+
+    def _inspect_jwt(self, text: str, endpoint: str):
+        import base64
+        jwt_matches = re.findall(r"\beyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]*", text)
+        for token in jwt_matches:
+            parts = token.split(".")
+            if len(parts) >= 2:
+                try:
+                    h_b64 = parts[0] + "=" * (-len(parts[0]) % 4)
+                    header = json.loads(base64.urlsafe_b64decode(h_b64.encode()).decode("utf-8", errors="ignore"))
+                    alg = str(header.get("alg", "")).lower()
+                    if alg == "none":
+                        self.blackboard.add_finding(
+                            VulnerabilityFinding(
+                                id=f"VULN-JWT-ALG-NONE-{endpoint.replace('/', '_')}",
+                                vuln_type=VulnerabilityType.AUTH_BYPASS,
+                                title="JWT Insecure 'none' Algorithm Accepted",
+                                severity=Severity.HIGH,
+                                endpoint=endpoint,
+                                request_url=endpoint,
+                                description="A JSON Web Token using the insecure 'none' algorithm was identified, allowing signature verification bypass.",
+                                evidence=f"JWT Token header: alg={header.get('alg')}",
+                                cwe_id="CWE-287",
+                                cvss_score=8.5,
+                                remediation="Reject JWT tokens with 'alg': 'none' and strictly enforce strong signature verification."
+                            )
+                        )
+                    p_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+                    payload = json.loads(base64.urlsafe_b64decode(p_b64.encode()).decode("utf-8", errors="ignore"))
+                    if "exp" not in payload:
+                        self.blackboard.add_finding(
+                            VulnerabilityFinding(
+                                id=f"VULN-JWT-NO-EXP-{endpoint.replace('/', '_')}",
+                                vuln_type=VulnerabilityType.AUTH_BYPASS,
+                                title="JWT Token Missing Expiration ('exp') Claim",
+                                severity=Severity.LOW,
+                                endpoint=endpoint,
+                                request_url=endpoint,
+                                description="The JWT token does not contain an expiration ('exp') claim, enabling indefinitely replayable sessions.",
+                                evidence=f"JWT Payload keys: {list(payload.keys())}",
+                                cwe_id="CWE-613",
+                                cvss_score=4.3,
+                                remediation="Include an explicit expiration ('exp') claim with reasonable TTL in all issued JWT tokens."
+                            )
+                        )
+                except Exception:
+                    pass
