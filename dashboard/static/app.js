@@ -32,7 +32,7 @@ function renderStatus(){
   const s=snapshot;if(!s)return;const running=s.status==='running'||starting;
   const displayState=running?'running':s.status;
   if($('scan-state').dataset.state!==displayState)$('scan-state').dataset.state=displayState;
-  $('status').textContent=running?'진단 중':statusNames[s.status]||s.status;$('scope').textContent=s.target_url?(s.demo?'로컬 데모 · ':s.mode==='deep'?'[로컬 심화] ':'')+s.target_url:'—';$('elapsed').textContent=duration();
+  $('status').textContent=running?'진단 중':statusNames[s.status]||s.status;$('scope').textContent=s.target_url?(s.demo?'로컬 데모 · ':s.mode==='deep'?'[심화 모드] ':'')+s.target_url:'—';$('elapsed').textContent=duration();
   $('count-findings').textContent=s.findings_count.toLocaleString();$('count-chains').textContent=s.chains_count.toLocaleString();$('count-endpoints').textContent=s.endpoints_count.toLocaleString();
   const gradeEl=$('security-grade');
   if(gradeEl){
@@ -172,7 +172,7 @@ function renderLogs(){
     const clogs=consentLogs||[];
     $('consent-logs').replaceChildren(...clogs.slice(-50).reverse().map(entry=>{
       const row=el('li');
-      const modeTag=entry.mode==='deep'?'[로컬 심화]':'[운영 안전]';
+      const modeTag=entry.mode==='deep'?'[심화 모드]':'[운영 안전]';
       const text=`${modeTag} ${entry.target_url} · ${entry.statement||'동의 완료'} (${entry.scan_id||''})`;
       row.append(el('time','',timeLabel(entry.timestamp)),el('span','',text));
       return row;
@@ -272,6 +272,6 @@ $('finding-dialog').addEventListener('click',event=>{if(event.target===$('findin
 $('export-form').addEventListener('submit',saveSelected);
 $('shutdown').addEventListener('click',async()=>{try{await post('/api/app/shutdown');shuttingDown=true;$('status').textContent='앱 종료';for(const b of document.querySelectorAll('button'))b.disabled=true;}catch(exc){error(exc.message);}});
 window.addEventListener('hashchange',()=>setView(location.hash.slice(1),false));let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(renderCharts,100);});
-function updateConsentLabel(){const mode=$('scan-mode')?.value||'safe';const lbl=$('consent-label');if(!lbl)return;if(mode==='deep')lbl.textContent='로컬 실습 대상이며 선택한 심화 검사와 테스트 데이터 생성을 승인합니다';else lbl.textContent='소유하거나 진단 허가를 받은 대상입니다';}
+function updateConsentLabel(){const mode=$('scan-mode')?.value||'safe';const lbl=$('consent-label');if(!lbl)return;if(mode==='deep')lbl.textContent='대상 환경의 격리를 확인하였으며 심화 검사와 테스트 데이터 생성을 승인합니다';else lbl.textContent='소유하거나 진단 허가를 받은 대상입니다';}
 $('scan-mode')?.addEventListener('change',updateConsentLabel);updateConsentLabel();
 initExport();setView(location.hash.slice(1)||'overview',false);refresh(true);setInterval(()=>refresh(),700);setInterval(()=>{if(snapshot)$('elapsed').textContent=duration();},500);

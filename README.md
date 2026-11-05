@@ -4,7 +4,7 @@
 > (Web Vulnerability Auditor & Attack Path Chaining Agent)
 
 [![Version](https://img.shields.io/badge/version-v2.6.0-blue.svg)](docs/BUILD_INFO.json)
-[![Tests](https://img.shields.io/badge/tests-172%2F172%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
+[![Tests](https://img.shields.io/badge/tests-173%2F173%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
 [![Smoke Test](https://img.shields.io/badge/smoke%20test-27%2F27%20PASS-brightgreen.svg)](tests/TEST_RESULTS.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg)](WVA.exe)
 
@@ -28,7 +28,7 @@
    - 계정·역할별 비공개 객체 접근 정책 대조 (`R09`, `R10`), 저장형 XSS 정리 완결성 (`R12-S`), 시간 기반 SQLi (`R11-T`)
 2. **유동적 이원화 진단 모드 (`safe` vs `deep`)**:
    - **운영 안전 모드 (`safe`)**: 실제 서비스 중인 환경을 위해 비파괴 읽기 전용 카나리 프로브와 요청 속도 제한(Throttling 25ms)을 적용하여 서비스 가용성을 완벽히 보호.
-   - **격리 샌드박스 모드 (`deep`)**: 점검 중인 서버나 복제본 환경을 위해 고속 스캔(5ms), 전수 파라미터 탐색, 동시성/레이스 컨디션 검증(`R15`), 안전 마커(`wva_test_`) 기반 테스트 데이터 생성 및 자동 삭제(Teardown) 생명주기 검증(`R14`) 지원.
+   - **심화 모드 (Deep DAST) (`deep`)**: 원격 스테이징/점검 중인 서버나 격리 환경을 위해 고속 스캔(5ms), 전수 파라미터 탐색, 동시성/레이스 컨디션 검증(`R15`), 안전 마커(`wva_test_`) 기반 테스트 데이터 생성 및 자동 삭제(Teardown) 생명주기 검증(`R14`) 지원.
 3. **2.6 판정 신뢰성 및 엄격한 증거 검증 (`docs/RELIABILITY_UPGRADE_2.6.md`)**:
    - 단순 성공 설명 문구, 입력 반사, 업로드 거절을 취약점으로 확정하던 분기를 제거하고 명확한 독립 증거 계약을 적용.
    - 필수 검사에 미실행·오류·미확정이 있는 경우 불완전한 결과를 높은 등급으로 오인하지 않도록 참고 등급을 자동으로 '보류(SIGNAL)' 처리.
@@ -49,7 +49,7 @@
 3. **대상 URL**을 입력합니다. (예: `http://localhost:5000` 또는 `https://example.com/app/?page=1`)
 4. **진단 범위**와 **진단 모드**를 선택합니다:
    - **진단 범위**: `경로 기준` (입력 경로 및 하위 경로) / `서버 전체` (동일 Origin 전체 엔드포인트)
-   - **진단 모드**: `운영 안전 모드 (Safe DAST)` / `격리 샌드박스 모드 (Deep DAST)`
+   - **진단 모드**: `운영 안전 모드 (Safe DAST)` / `심화 모드 (Deep DAST) (Deep DAST)`
 5. **진단 시작** 버튼을 클릭하면 실시간 프로그레스 모션과 함께 진단이 진행됩니다.
 6. 진단 완료 후 위험도 차트, 상세 표, 다단계 공격 체인, 단계별 조치 가이드를 확인합니다.
 7. **저장** 메뉴에서 원하는 항목과 포맷(**JSON / Markdown / CSV**)을 선택하여 보고서를 다운로드합니다.
@@ -181,7 +181,7 @@ flowchart LR
 
 ## 6. 품질 보증 및 검증 현황 (QA & Verification)
 
-- **단위 / 통합 회귀 테스트**: **172 / 172 PASS** (`pytest -q`)
+- **단위 / 통합 회귀 테스트**: **173 / 173 PASS** (`pytest -q`)
 - **실행 파일 스모크 테스트**: **27 / 27 PASS** (`python tests/smoke_executable.py`)
 - **소스·바이너리 정합성 바인딩**: `python packaging/build_manifest.py --verify` 검증 완결
 - **Windows 실행 배치 표준 준수**:
@@ -220,7 +220,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\Setup-TestEnvironment.ps1
 # 2. 소스 코드로 WVA 서버 실행
 .\.venv\Scripts\python.exe launcher.py
 
-# 3. 전체 회귀 테스트 실행 (172개 테스트)
+# 3. 전체 회귀 테스트 실행 (173개 테스트)
 .\.venv\Scripts\python.exe -m pytest
 
 # 4. 소스-바이너리 정합성 검증

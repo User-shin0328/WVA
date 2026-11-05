@@ -25,10 +25,10 @@ class SystemAuditor:
 
     def validate(self, *urls):
         if self.options.mode != 'deep':
-            raise ValueError('명시한 서버 시나리오는 로컬 심화 모드에서만 수행합니다.')
-        if not all(url and loopback(url) and self.gov.is_in_scope(url)
+            raise ValueError('명시한 서버 시나리오는 심화 모드에서만 수행합니다.')
+        if not all(url and self.gov.is_in_scope(url)
                    and self.gov.is_safe_endpoint(urlsplit(url).path) for url in urls):
-            raise ValueError('모든 시나리오 URL은 범위 안의 명시한 로컬 실습 주소여야 합니다.')
+            raise ValueError('모든 시나리오 URL은 범위 안의 안전한 대상 주소여야 합니다.')
 
     async def audit(self, client):
         for kind in RULES: await self.check(client, kind)
@@ -64,7 +64,7 @@ class SystemAuditor:
             except Exception as exc: errors.append(type(exc).__name__ + ': ' + str(exc)[:140])
         status = 'FINDING' if found else 'ERROR' if errors else 'SIGNAL' if signals else 'PASS' if tested else 'NOT_RUN'
         reason = f'명시한 시나리오 {tested}개 대조, 확인 {found}건, 미확정 {signals}건.'
-        if not cases: reason = '독립 증거를 확인할 로컬 실습 시나리오를 지정하지 않았습니다.'
+        if not cases: reason = '독립 증거를 확인할 시나리오를 지정하지 않았습니다.'
         if errors: reason += ' ' + '; '.join(errors[:2])
         record(self.bb, rule, title, status, reason, tested, found, len(errors), required=bool(cases),inconclusive=signals)
 

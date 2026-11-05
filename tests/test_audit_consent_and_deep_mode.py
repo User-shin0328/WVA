@@ -282,3 +282,15 @@ async def test_sql_success_banner_is_only_a_signal():
     checks = bb.asset.metadata.get("checks", [])
     r11 = next(c for c in checks if c["rule_id"] == "R11")
     assert r11["status"] == "SIGNAL"
+
+
+@pytest.mark.asyncio
+async def test_deep_mode_allows_remote_target(client):
+    res = await client.post("/api/scan/start", json={
+        "target_url": "https://staging.internal.corp",
+        "consent": True,
+        "mode": "deep"
+    })
+    assert res.status_code == 200
+    assert res.json()["mode"] == "deep"
+    await client.post("/api/scan/stop", json={})

@@ -104,7 +104,7 @@ class PolicyAuditor:
         tested=found=0;errors=[]
         for case in self.options.timing_cases:
             try:
-                if not loopback(case.url):raise ValueError('시간 대조는 명시한 로컬 실습 대상에서만 실행합니다.')
+                if not self.gov.is_in_scope(case.url):raise ValueError('시간 대조는 범위 안의 명시한 대상에서만 실행합니다.')
                 times=[[],[]]
                 for _ in range(3):
                     for index,value in enumerate([case.false_value,case.true_value]):
@@ -134,7 +134,7 @@ class PolicyAuditor:
             self.bb.asset.metadata.setdefault('cleanup_receipts',[]).append(receipt)
             try:
                 urls=[case.write_url,case.read_url,case.cleanup_url]
-                if not all(loopback(url) and self.gov.is_in_scope(url) for url in urls):raise ValueError('저장형 검사는 범위 안의 명시한 로컬 실습 URL만 사용합니다.')
+                if not all(self.gov.is_in_scope(url) for url in urls):raise ValueError('저장형 검사는 범위 안의 명시한 URL만 사용합니다.')
                 from playwright.async_api import async_playwright
                 from agents.browser_auditor import browser_executable
                 async with async_playwright() as playwright:
@@ -178,8 +178,8 @@ class PolicyAuditor:
         if mode != 'deep' or not self.options.concurrency_check:
             record(self.bb,'R15','동시성 및 상태 일관성 대조','NOT_RUN','운영 안전 모드에서는 동시성 부하 검사를 수행하지 않습니다. 샌드박스 모드를 선택하세요.')
             return
-        if not loopback(self.gov.target_base_url):
-            record(self.bb,'R15','동시성 및 상태 일관성 대조','ERROR','명시한 로컬 대상에서만 동시 요청을 대조합니다.',errors=1);return
+        if not self.gov.is_in_scope(self.gov.target_base_url):
+            record(self.bb,'R15','동시성 및 상태 일관성 대조','ERROR','범위 안의 명시한 대상에서만 동시 요청을 대조합니다.',errors=1);return
         candidates = [ep.url for ep in self.bb.asset.endpoints if ep.method=='GET' and ep.parameters and self.gov.is_in_scope(ep.url)]
         if not candidates:
             candidates = [self.gov.target_base_url]

@@ -233,9 +233,6 @@ async def start_scan(req: ScanRequest, request: Request = None):
         raise HTTPException(409, "진단이 진행 중입니다. 완료하거나 중단한 뒤 다시 시작하세요.")
     if not req.consent and not req.demo:
         raise HTTPException(400, "진단 권한 확인에 동의해야 시작할 수 있습니다.")
-    from agents.policy_auditor import loopback
-    if req.mode=='deep' and not req.demo and not loopback(req.target_url):
-        raise HTTPException(400,'로컬 심화 모드는 명시한 루프백 실습 주소에서만 실행할 수 있습니다.')
     scan_id = uuid.uuid4().hex[:12]
     log_path = data_root() / "logs" / "scans" / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + scan_id + ".jsonl")
     try:
@@ -258,7 +255,7 @@ async def start_scan(req: ScanRequest, request: Request = None):
     consent_log_dir = data_root() / "logs"
     consent_log_dir.mkdir(parents=True, exist_ok=True)
     consent_statement = (
-        "명시한 로컬 실습 대상의 선택한 검사와 테스트 데이터 생성을 승인합니다. 대상 환경의 격리는 별도로 확인해야 합니다."
+        "명시한 대상의 선택한 심화 검사와 테스트 데이터 생성을 승인합니다. 대상 환경의 격리는 별도로 확인해야 합니다."
         if req.mode == "deep"
         else "소유하거나 진단 권한을 득한 웹 대상에 대한 비파괴 안전 진단을 승인합니다."
     )

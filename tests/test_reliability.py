@@ -116,7 +116,7 @@ async def test_teardown_requires_real_receipts():
     assert bb.asset.metadata['checks'][0]['tested']==0
 
 
-@pytest.mark.parametrize('mode,url',[('safe','http://127.0.0.1'),('deep','https://example.invalid')])
+@pytest.mark.parametrize('mode,url',[('safe','http://127.0.0.1'),('deep','https://example.invalid/logout')])
 @pytest.mark.asyncio
 async def test_explicit_system_contract_rejects_unsafe_context_without_requests(mode,url):
     bb,gov,opts,budget=setup({'mode':mode,'system_cases':[{'kind':'command','url':url+'/command'}]},url)
@@ -163,10 +163,13 @@ def test_check_invariants(status,tested,errors,expected):
 
 
 @pytest.mark.asyncio
-async def test_consent_omission_and_remote_deep_rejected(client):
+async def test_consent_omission_and_remote_deep_allowed(client):
     assert (await client.post('/api/scan/start',json={'target_url':'http://127.0.0.1:1'})).status_code==400
-    assert (await client.post('/api/scan/start',json={'target_url':'https://example.invalid','mode':'deep','consent':True})).status_code==400
-    assert (await client.get('/api/scan/consent_log')).json()==[]
+    assert (await client.post('/api/scan/start',json={'target_url':'https://example.invalid','mode':'deep','consent':False})).status_code==400
+    res=await client.post('/api/scan/start',json={'target_url':'https://example.invalid','mode':'deep','consent':True})
+    assert res.status_code==200
+    assert res.json()['mode']=='deep'
+    await client.post('/api/scan/stop',json={})
 
 
 def finding(id,post=None,pre=None):
