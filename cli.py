@@ -5,8 +5,9 @@ import time
 import subprocess
 from agents.engine import VulnerabilityAnalysisEngine
 from reporting.report_generator import SecurityReportGenerator
+from core.rules.contracts import ScanOptions
 
-def run_demo():
+def run_demo(mode: str = "deep"):
     print("=" * 70)
     print("   [WVA] Web Vulnerability & Attack Path Chaining Agent (Demo)")
     print("=" * 70)
@@ -22,9 +23,10 @@ def run_demo():
     target_url = "http://127.0.0.1:8989"
     try:
         print(f"[*] Target is up at: {target_url}")
-        print("[*] Initializing WVA Multi-Agent Analysis Pipeline...")
+        print(f"[*] Initializing WVA Multi-Agent Analysis Pipeline (Mode: {mode})...")
         
-        engine = VulnerabilityAnalysisEngine(target_url)
+        options = ScanOptions(mode=mode)
+        engine = VulnerabilityAnalysisEngine(target_url, options=options)
         blackboard = asyncio.run(engine.execute_audit())
 
         # Generate Reports
@@ -73,11 +75,12 @@ def run_demo():
         server_process.wait()
         print("[*] Done.")
 
-def run_scan(target_url: str):
+def run_scan(target_url: str, mode: str = "deep"):
     print("=" * 70)
     print(f"   [WVA] Scanning Target URL: {target_url}")
     print("=" * 70)
-    engine = VulnerabilityAnalysisEngine(target_url)
+    options = ScanOptions(mode=mode)
+    engine = VulnerabilityAnalysisEngine(target_url, options=options)
     blackboard = asyncio.run(engine.execute_audit())
 
     reporter = SecurityReportGenerator(blackboard)
@@ -93,12 +96,13 @@ def main():
     parser = argparse.ArgumentParser(description="WVA - Web Vulnerability & Attack Path Chaining Agent")
     parser.add_argument("--target", type=str, help="Target URL to audit (e.g. http://localhost:8080)")
     parser.add_argument("--demo", action="store_true", help="Run self-contained demo using mock target")
+    parser.add_argument("--mode", type=str, default="deep", choices=["safe", "deep"], help="Scan mode: safe or deep (default: deep)")
     args = parser.parse_args()
 
     if args.demo:
-        run_demo()
+        run_demo(mode=args.mode)
     elif args.target:
-        run_scan(args.target)
+        run_scan(args.target, mode=args.mode)
     else:
         print("=" * 65)
         print("   [WVA] Web Vulnerability & Attack Path Chaining Agent CLI")
@@ -109,7 +113,7 @@ def main():
         print("=" * 65)
         choice = input("Select an option [1-3]: ").strip()
         if choice == "1":
-            run_demo()
+            run_demo(mode=args.mode)
         elif choice == "2":
             target = input("Enter target URL (e.g. http://127.0.0.1:8000): ").strip()
             if target:

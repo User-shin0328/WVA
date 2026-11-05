@@ -35,3 +35,4 @@ logs/
 # Generated audit sessions stay local; reviewed draft reports remain tracked.
 /reports/[0-9]*.json
 /reports/[0-9]*.md
+WVA_vulnerability_report.*
